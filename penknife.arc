@@ -525,13 +525,10 @@
 
 (rc:ontype pk-staticenv-get-compile-fork (varname)
              pk-ad-hoc-env pk-ad-hoc-env
-  (let data (or rep.self.varname
-                (err:+ "The variable \"" varname "\" is statically "
-                       "unbound."))
-    (aif do.data!compile-fork
-      (pk-call car.it varname)
-      (let op-compiler pk-staticenv-default-op-compiler.self
-        (pk-call pk-compile-fork-from-op.op-compiler varname)))))
+  (aif (aand rep.self.varname it!compile-fork)
+    (pk-call car.it varname)
+    (let op-compiler pk-staticenv-default-op-compiler.self
+      (pk-call pk-compile-fork-from-op.op-compiler varname))))
 
 (rc:ontype pk-staticenv-default-op-compiler ()
              pk-ad-hoc-env pk-ad-hoc-env
