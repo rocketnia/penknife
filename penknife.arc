@@ -483,11 +483,18 @@
 ;
 (def pk-compose-compiler (compiled-op body staticenv)
   (withs (token-args           soup-tokens.body
-          compiled-args        (map [pk-soup-compile _ staticenv]
-                                 token-args)
+          compile-first-arg    (when token-args
+                                 (memo:fn ()
+                                   (pk-soup-compile car.token-args
+                                                    staticenv)))
           compile-op-and-body  (memo:fn ()
                                  (map pk-call:!get:rep
-                                   (cons compiled-op compiled-args))))
+                                   (cons compiled-op
+                                     (when token-args
+                                       (cons call.compile-first-arg
+                                         (map [pk-soup-compile
+                                                _ staticenv]
+                                           cdr.token-args)))))))
     (annotate 'pk-compile-fork
       (obj get  (memo:fn ()
                   (annotate 'pk-lambdacalc-call
@@ -499,13 +506,14 @@
                   (unless token-args
                     (err:+ "A 'compose form with no arguments was "
                            "used in functional position."))
-                  (pk-call (!op:rep car.compiled-args)
-                    car.compiled-args
-                    (if single.token-args body2
-                      (annotate 'pk-soup
-                        (list:list:annotate 'pk-slurp-compose
-                          (list cdr.token-args body2))))
-                    staticenv2))))))
+                  (let compiled-composed-op call.compile-first-arg
+                    (pk-call rep.compiled-composed-op!op
+                      compiled-composed-op
+                      (if single.token-args body2
+                        (annotate 'pk-soup
+                          (list:list:annotate 'pk-slurp-compose
+                            (list cdr.token-args body2))))
+                      staticenv2)))))))
 
 
 (def pk-compile-fork-from-op (op-compiler)
