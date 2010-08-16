@@ -685,7 +685,7 @@
 ; should relate to ssyntax.
 (def pk-is-simple-identifier (x)
   (case type.x string
-    (all [case _ #\- t letter._] x)))
+    (all (orf letter [pos _ "+-*/<=>"]) x)))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) one-slurp
   (zap rep soup)
@@ -863,7 +863,7 @@
 
 (pk-dynenv-set pk-replenv* 'demo (fn () (prn "This is a demo.")))
 
-(pk-dynenv-set pk-replenv* 'plus +)
+(pk-dynenv-set pk-replenv* '+ +)
 
 (pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
                                    (fn ((o code 'goodbye))
