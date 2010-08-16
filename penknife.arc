@@ -99,6 +99,7 @@
 ; (soup->string soup)
 ; (slurp->string self)  ; rulebook
 ;
+; (pk-compile-literal-from-thunk thunk staticenv)
 ; (pk-function-call-compiler compiled-op body staticenv)
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; (pk-compose-compiler compiled-op body staticenv)
@@ -483,6 +484,14 @@
   (+ "[" (soup->string rep.self) "]"))
 
 
+(def pk-compile-literal-from-thunk (thunk staticenv)
+  (let getter (memo:fn ()
+                (annotate 'pk-lambdacalc-literal call.thunk))
+    (annotate 'pk-compile-fork
+      (obj get   getter
+           meta  getter
+           op    pk-staticenv-default-op-compiler.staticenv))))
+
 (def pk-function-call-compiler (compiled-op body staticenv)
   (let compile-op-and-body (memo:fn ()
                              (cons (pk-call rep.compiled-op!get)
@@ -502,12 +511,7 @@
 ; [q Hello, world!] compiles to a literal " Hello, world!", with a
 ; space at the beginning and everything.
 (def pk-stringquote-compiler (compiled-op body staticenv)
-  (let getter (memo:fn ()
-                (annotate 'pk-lambdacalc-literal soup->string.body))
-    (annotate 'pk-compile-fork
-      (obj get   getter
-           meta  getter
-           op    pk-staticenv-default-op-compiler.staticenv))))
+  (pk-compile-literal-from-thunk (fn () soup->string.body) staticenv))
 
 ; We define 'compose such that [[compose a b c] d e] is compiled based
 ; on the compiler of "a" and a body of this format:
@@ -520,19 +524,20 @@
 ;
 (def pk-compose-compiler (compiled-op body staticenv)
   (withs (token-args           soup-tokens.body
-          compile-first-arg    (when token-args
-                                 (memo:fn ()
+          compile-first-arg    (memo:fn ()
+                                 (if token-args
                                    (pk-soup-compile car.token-args
-                                                    staticenv)))
+                                                    staticenv)
+                                   (pk-compile-literal-from-thunk
+                                     (fn () idfn) staticenv)))
           compile-op-and-body  (memo:fn ()
                                  (map pk-call:!get:rep
                                    (cons compiled-op
                                      (when token-args
-                                       (map pk-call:!get:rep
-                                         (cons call.compile-first-arg
-                                           (map [pk-soup-compile
-                                                  _ staticenv]
-                                             cdr.token-args))))))))
+                                       (cons call.compile-first-arg
+                                         (map [pk-soup-compile
+                                                _ staticenv]
+                                           cdr.token-args)))))))
     (annotate 'pk-compile-fork
       (obj get   (memo:fn ()
                    (annotate 'pk-lambdacalc-call
@@ -541,13 +546,10 @@
                    (annotate 'pk-lambdacalc-call-meta
                      call.compile-op-and-body))
            op    (fn (compiled-op2 body2 staticenv2)
-                   (unless token-args
-                     (err:+ "A 'compose form with no arguments was "
-                            "used in functional position."))
                    (let compiled-composed-op call.compile-first-arg
                      (pk-call rep.compiled-composed-op!op
                        compiled-composed-op
-                       (if single.token-args body2
+                       (case cdr.token-args nil body2
                          (annotate 'pk-soup
                            (list:list:annotate 'pk-slurp-compose
                              (list cdr.token-args body2))))
@@ -727,13 +729,8 @@
   (unless (and single.soup (isa car.soup 'string)
             (all digit car.soup))
     (do.fail "The word wasn't a nonnegative decimal integer."))
-  (let getter (memo:fn ()
-                (annotate 'pk-lambdacalc-literal
-                  (coerce car.soup 'int)))
-    (annotate 'pk-compile-fork
-      (obj get   getter
-           meta  getter
-           op    pk-staticenv-default-op-compiler.staticenv))))
+  (pk-compile-literal-from-thunk
+    (fn () (coerce car.soup 'int)) staticenv))
 
 (rc:ontype pk-slurp-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
