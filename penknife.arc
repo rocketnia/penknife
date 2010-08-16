@@ -1,5 +1,6 @@
 ; penknife.arc
-;
+
+
 ; Copyright (c) 2010 Ross Angle
 ;
 ;   Permission is hereby granted, free of charge, to any person
@@ -101,23 +102,39 @@
 ; (pk-function-call-compiler compiled-op body staticenv)
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; (pk-compose-compiler compiled-op body staticenv)
+; (pk-assign-compiler compiled-op body staticenv)
+; (pk-assignmeta-compiler compiled-op body staticenv)
+;
+; (pk-meta . args)                      ; macro
+; (pk-make-ad-hoc-binding value)
+; (pk-make-ad-hoc-binding-meta value)
+; (pk-binding-get self)                 ; rulebook
+; (pk-binding-get-meta self)            ; rulebook
+; (pk-binding-set self new-value)       ; rulebook
+; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-compile-fork-from-op op-compiler)
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
+; (pk-dynenv-get-binding self varname)          ; rulebook
 ; (pk-dynenv-get self varname)                  ; rulebook
-; (pk-dynenv-get-tl self varname)               ; rulebook
+; (pk-dynenv-get-meta self varname)             ; rulebook
+; (pk-dynenv-set-binding self varname)          ; rulebook
+; (pk-dynenv-unset-binding self varname)        ; rulebook
+; (pk-dynenv-set self varname)                  ; rulebook
+; (pk-dynenv-set-meta self varname)             ; rulebook
 ;
 ; (pk-is-simple-identifier x)
 ; (pk-soup-compile-tl soup staticenv)    ; rulebook
 ; (pk-soup-compile soup staticenv)       ; rulebook
 ; (pk-slurp-compile brackets staticenv)  ; rulebook
 ;
-; (pk-call-tl self . args)  ; rulebook
-; (pk-call self . args)     ; rulebook
+; (pk-call-meta self . args)  ; rulebook
+; (pk-call self . args)       ; rulebook
 ;
-; (pk-eval-tl self dynenv)  ; rulebook
-; (pk-eval self dynenv)     ; rulebook
+; (pk-eval-meta self dynenv)  ; rulebook
+; (pk-eval self dynenv)       ; rulebook
+; (pk-eval-tl self dynenv)    ; rulebook
 ;
 ; pk-replenv*                       ; value of type 'pk-ad-hoc-env
 ; (pkrepl (o str (errsafe:stdin)))
@@ -158,11 +175,33 @@
 ;   rep: A symbol representing the variable to look up in the dynamic
 ;        environment when evaluating this expression.
 ;
-; pk-lambdacalc-var-tl
+; pk-lambdacalc-var-meta
 ;   rep: A symbol representing the variable to look up in the dynamic
 ;        environment when evaluating this expression. This looks up
-;        any metadata which is associated to the variable so that the
-;        variable name can be used as a top-level command.
+;        the 'pk-ad-hoc-meta metadata table corresponding to the
+;        variable.
+;
+; pk-lambdacalc-set
+;   rep: A list which supports the following fields:
+;   rep._.0:  A symbol representing the variable to modify in the
+;             dynamic environment when evaluating this expression.
+;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
+;             types, which will provide the new value for the variable
+;             (which will also be the result of this expression). If
+;             the new value has special metadata, that metadata will
+;             be ignored, and it won't even be returned by this
+;             expression.
+;
+; pk-lambdacalc-set-meta
+;   rep: A list which supports the following fields:
+;   rep._.0:  A symbol representing the variable to modify in the
+;             dynamic environment when evaluating this expression.
+;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
+;             types, which will provide the new value for the variable
+;             (which will also be the result of this expression). If
+;             the new value has special metadata, that metadata will
+;             be given to the variable, and it will be returned as the
+;             metadata of this expression's result.
 ;
 ; pk-lambdacalc-call
 ;   rep: A cons cell containing the expression for the operator and a
@@ -171,34 +210,34 @@
 ;        'pk-lambdacalc-[something] types. The expressions will be
 ;        evaluated from first to last and called with 'pk-call.
 ;
-; pk-lambdacalc-call-tl
+; pk-lambdacalc-call-meta
 ;   rep: A cons cell containing the expression for the operator and a
 ;        proper list of expressions for the arguments, where each
 ;        expression is a value of one of the
 ;        'pk-lambdacalc-[something] types. The expressions will be
-;        evaluated from first to last and called with 'pk-call-tl.
+;        evaluated from first to last and called with 'pk-call-meta.
 ;
 ; pk-compile-fork
-;   rep: A table which contains the following fields:
-;   rep._!get:  A value which, when called using 'pk-call, accepts no
-;               arguments and returns a value of one of the
-;               'pk-lambdacalc-[something] types, representing an
-;               expression that returns a value to be used in a parent
-;               expression.
-;   rep._!tl:   A value which, when called using 'pk-call, accepts no
-;               arguments and returns a value of one of the
-;               'pk-lambdacalc-[something] types, representing an
-;               expression that returns a value to be used by a
-;               top-level command interpreter.
-;   rep._!op:   A value which, when called using 'pk-call or
-;               'pk-call-tl, accepts this very 'pk-compile-fork value
-;               (the compiled operator), a 'pk-soup value (the
-;               uncompiled body), and a static environment and returns
-;               a 'pk-compile-fork value representing the compiled
-;               expression.
+;   rep: A table which supports the following fields:
+;   rep._!get:   A value which, when called using 'pk-call, accepts no
+;                arguments and returns a value of one of the
+;                'pk-lambdacalc-[something] types, representing an
+;                expression that returns a value to be used in a
+;                parent expression.
+;   rep._!meta:  A value which, when called using 'pk-call, accepts no
+;                arguments and returns a value of one of the
+;                'pk-lambdacalc-[something] types, representing an
+;                expression that returns a value to be used by a
+;                top-level command interpreter.
+;   rep._!op:    A value which, when called using 'pk-call or
+;                'pk-call-meta, accepts this very 'pk-compile-fork
+;                value (the compiled operator), a 'pk-soup value (the
+;                uncompiled body), and a static environment and
+;                returns a 'pk-compile-fork value representing the
+;                compiled expression.
 ;
 ; pk-slurp-compose
-;   rep: A list which contains the following fields:
+;   rep: A list which supports the following fields:
 ;   rep._.0:  A nonempty proper list of 'pk-soup values representing
 ;             uncompiled operator expressions to apply in reverse
 ;             order, in series, to the body. If there is only one
@@ -209,57 +248,55 @@
 ;   rep._.1:  A 'pk-soup value representing the uncompiled body to
 ;             apply the operators to.
 ;
+; pk-ad-hoc-binding
+;   rep: A singleton list which supports getting and setting the
+;        following field:
+;   rep._.0:  A value of type 'pk-ad-hoc-meta, representing the
+;             metadata associated with the variable represented by
+;             this binding.
+;
 ; pk-ad-hoc-env
-;   rep: A table mapping bound variable names to tables which support
-;        the following fields:
-;   rep._.name!value:         The value to return when looking up the
-;                             variable's value when treating this as a
-;                             dynamic environment.
-;   rep._.name!tl-value:      If present, the table to return when
-;                             looking up the variable's top-level
-;                             command metadata when treating this as a
-;                             dynamic environment. (The top-level
-;                             command metadata is used by the command
-;                             interpreter when the variable name is
-;                             all there is to the command.) If instead
-;                             this is nil, then a default metadata
-;                             table will be constructed, wrapping the
-;                             variable's value.
-;   rep._.name!compile-fork:  If present, a singleton proper list
-;                             containing a Penknife value which, when
-;                             given the variable name as a string,
-;                             will return the 'pk-compile-fork value
-;                             to return when compiling an
-;                             identification of the variable when
-;                             treating this as a static environment.
-;                             If instead this is nil, then a default
-;                             'pk-compile-fork will be constructed.
+;   rep: A table mapping bound variable names to singleton proper
+;        lists containing their bindings.
 ;
-; pk-tl-fn
-;   rep: A function which returns a top-level command metadata table.
+; pk-fn-meta
+;   rep: A function which returns a value of type 'pk-ad-hoc-meta.
 ;        This function will be called using the arguments from
-;        'pk-call or 'pk-call-tl, but only 'pk-call-tl will return the
-;        full command metadata.
+;        'pk-call or 'pk-call-meta, but only 'pk-call-meta will return
+;        the full command metadata.
 ;
-; Top-level command metadata table
-;   This is not a tagged type. Instead, it's a table which supports
-;   the following fields:
-;     _!result:    The value to use as the result in any context other
-;                  than the top-level one. This is the only
-;                  non-optional field; if this is nil, then the value
-;                  used is actually nil itself.
-;     _!action:    If present, a singleton proper list containing a
-;                  Penknife value which, when called with no arguments
-;                  using 'pk-call, will imperatively perform some
-;                  additional action which is meant to be done after
-;                  normal evaluation and before the result is written
-;                  to the REPL.
-;     _!echoless:  Any value, used as a boolean to indicate (unless
-;                  it's nil) that the result should not be written to
-;                  the REPL.
-;     _!quit:      If present, a singleton proper list indicating that
-;                  the Penknife REPL session should exit and return
-;                  the contained value to the Arc REPL.
+; pk-ad-hoc-meta
+;   rep: A table which supports the following fields:
+;   rep._!result:         The value to use as the result in any
+;                         context other than the top-level one. This
+;                         is the only non-optional field; if this is
+;                         nil, then the value used is actually nil
+;                         itself.
+;   rep._!action:         If present, a singleton proper list
+;                         containing a Penknife value which, when
+;                         called with no arguments using 'pk-call,
+;                         will imperatively perform some additional
+;                         action which is meant to be done after
+;                         normal evaluation and before the result is
+;                         written to the REPL.
+;   rep._!echoless:       Any value, used as a boolean to indicate
+;                         (unless it's nil) that the result should not
+;                         be written to the REPL.
+;   rep._!quit:           If present, a singleton proper list
+;                         indicating that the Penknife REPL session
+;                         should exit and return the contained value
+;                         to the Arc REPL.
+;   rep._!compile-fork:   If present, a singleton proper list
+;                         containing a Penknife value which, when
+;                         given a variable name as a string, will
+;                         return the 'pk-compile-fork value to return
+;                         when compiling an identification of the
+;                         variable when treating an environment
+;                         containing a binding with this meta-value as
+;                         a static environment. If instead this is
+;                         nil, then a default compile fork should be
+;                         constructed according to that environment's
+;                         own behavior.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -453,13 +490,13 @@
                                       _ staticenv]
                                     soup-tokens.body)))
     (annotate 'pk-compile-fork
-      (obj get  (memo:fn ()
-                  (annotate 'pk-lambdacalc-call
-                    call.compile-op-and-body))
-           tl   (memo:fn ()
-                  (annotate 'pk-lambdacalc-call-tl
-                    call.compile-op-and-body))
-           op   pk-staticenv-default-op-compiler.staticenv))))
+      (obj get   (memo:fn ()
+                   (annotate 'pk-lambdacalc-call
+                     call.compile-op-and-body))
+           meta  (memo:fn ()
+                   (annotate 'pk-lambdacalc-call-meta
+                     call.compile-op-and-body))
+           op    pk-staticenv-default-op-compiler.staticenv))))
 
 ; TODO: Figure out a better string syntax. Currently,
 ; [q Hello, world!] compiles to a literal " Hello, world!", with a
@@ -468,9 +505,9 @@
   (let getter (memo:fn ()
                 (annotate 'pk-lambdacalc-literal soup->string.body))
     (annotate 'pk-compile-fork
-      (obj get  getter
-           tl   getter
-           op   pk-staticenv-default-op-compiler.staticenv))))
+      (obj get   getter
+           meta  getter
+           op    pk-staticenv-default-op-compiler.staticenv))))
 
 ; We define 'compose such that [[compose a b c] d e] is compiled based
 ; on the compiler of "a" and a body of this format:
@@ -491,41 +528,112 @@
                                  (map pk-call:!get:rep
                                    (cons compiled-op
                                      (when token-args
-                                       (cons call.compile-first-arg
-                                         (map [pk-soup-compile
-                                                _ staticenv]
-                                           cdr.token-args)))))))
+                                       (map pk-call:!get:rep
+                                         (cons call.compile-first-arg
+                                           (map [pk-soup-compile
+                                                  _ staticenv]
+                                             cdr.token-args))))))))
     (annotate 'pk-compile-fork
-      (obj get  (memo:fn ()
-                  (annotate 'pk-lambdacalc-call
-                    call.compile-op-and-body))
-           tl   (memo:fn ()
-                  (annotate 'pk-lambdacalc-call-tl
-                    call.compile-op-and-body))
-           op   (fn (compiled-op2 body2 staticenv2)
-                  (unless token-args
-                    (err:+ "A 'compose form with no arguments was "
-                           "used in functional position."))
-                  (let compiled-composed-op call.compile-first-arg
-                    (pk-call rep.compiled-composed-op!op
-                      compiled-composed-op
-                      (if single.token-args body2
-                        (annotate 'pk-soup
-                          (list:list:annotate 'pk-slurp-compose
-                            (list cdr.token-args body2))))
-                      staticenv2)))))))
+      (obj get   (memo:fn ()
+                   (annotate 'pk-lambdacalc-call
+                     call.compile-op-and-body))
+           meta  (memo:fn ()
+                   (annotate 'pk-lambdacalc-call-meta
+                     call.compile-op-and-body))
+           op    (fn (compiled-op2 body2 staticenv2)
+                   (unless token-args
+                     (err:+ "A 'compose form with no arguments was "
+                            "used in functional position."))
+                   (let compiled-composed-op call.compile-first-arg
+                     (pk-call rep.compiled-composed-op!op
+                       compiled-composed-op
+                       (if single.token-args body2
+                         (annotate 'pk-soup
+                           (list:list:annotate 'pk-slurp-compose
+                             (list cdr.token-args body2))))
+                       staticenv2)))))))
 
+(def pk-assign-compiler (compiled-op body staticenv)
+  (let token-args soup-tokens.body
+    (unless (is len.token-args 2)
+      (err "An assignment body had more than two words in it."))
+    (let (var val-token) token-args
+      (zap rep var)
+      (unless (and single.var (isa car.var 'string)
+                (pk-is-simple-identifier car.var))
+        (err:+ "A name in an assignment form wasn't a simple "
+               "identifier."))
+      (zap sym:car var)
+      (let getter (memo:fn ()
+                    (annotate 'pk-lambdacalc-set
+                      (list var (pk-call:!get:rep:pk-soup-compile
+                                  val-token staticenv))))
+        (annotate 'pk-compile-fork
+          (obj get   getter
+               meta  getter
+               op    pk-staticenv-default-op-compiler.staticenv))))))
+
+(def pk-assignmeta-compiler (compiled-op body staticenv)
+  (let token-args soup-tokens.body
+    (unless (is len.token-args 2)
+      (err "An assignment body had more than two words in it."))
+    (let (var val-token) token-args
+      (zap rep var)
+      (unless (and single.var (isa car.var 'string)
+                (pk-is-simple-identifier car.var))
+        (err:+ "A name in an assignment form wasn't a simple "
+               "identifier."))
+      (zap sym:car var)
+      (let getter (memo:fn ()
+                    (annotate 'pk-lambdacalc-set-meta
+                      (list var (pk-call:!meta:rep:pk-soup-compile
+                                  val-token staticenv))))
+        (annotate 'pk-compile-fork
+          (obj get   getter
+               meta  getter
+               op    pk-staticenv-default-op-compiler.staticenv))))))
+
+
+(mac pk-meta args
+  `(annotate 'pk-ad-hoc-meta (obj ,@args)))
+
+(def pk-make-ad-hoc-binding (value)
+  (pk-make-ad-hoc-binding-meta:pk-meta result value))
+
+(def pk-make-ad-hoc-binding-meta (value)
+  (annotate 'pk-ad-hoc-binding list.value))
+
+(rc:ontype pk-binding-get () pk-ad-hoc-binding pk-ad-hoc-binding
+  (!result:rep pk-binding-get-meta.self))
+
+(rc:ontype pk-binding-get-meta () pk-ad-hoc-binding pk-ad-hoc-binding
+  rep.self.0)
+
+(rc:ontype pk-binding-set (new-value)
+             pk-ad-hoc-binding pk-ad-hoc-binding
+  (pk-binding-set-meta self (pk-meta result new-value))
+  new-value)
+
+(rc:ontype pk-binding-set-meta (new-value)
+             pk-ad-hoc-binding pk-ad-hoc-binding
+  (= rep.self.0 new-value))
+
+
+; TODO: Consider making 'pk-lambdacalc-var-binding,
+; 'pk-lambdacalc-set-binding, and 'pk-lambdacalc-unset-binding
+; expression types.
 
 (def pk-compile-fork-from-op (op-compiler)
   (fn (varname)
     (annotate 'pk-compile-fork
-      (obj get  (fn () (annotate 'pk-lambdacalc-var varname))
-           tl   (fn () (annotate 'pk-lambdacalc-var-tl varname))
-           op   op-compiler))))
+      (obj get   (fn () (annotate 'pk-lambdacalc-var varname))
+           meta  (fn () (annotate 'pk-lambdacalc-var-meta varname))
+           op    op-compiler))))
 
 (rc:ontype pk-staticenv-get-compile-fork (varname)
              pk-ad-hoc-env pk-ad-hoc-env
-  (aif (aand rep.self.varname it!compile-fork)
+  (aif (aand (pk-dynenv-get-binding self varname)
+             (!compile-fork:rep:pk-binding-get-meta car.it))
     (pk-call car.it varname)
     (let op-compiler pk-staticenv-default-op-compiler.self
       (pk-call pk-compile-fork-from-op.op-compiler varname))))
@@ -534,15 +642,43 @@
              pk-ad-hoc-env pk-ad-hoc-env
   pk-function-call-compiler)
 
+(rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
+  rep.self.varname)
+
 (rc:ontype pk-dynenv-get (varname) pk-ad-hoc-env pk-ad-hoc-env
-  (!value:or rep.self.varname
+  (iflet (binding) (pk-dynenv-get-binding self varname)
+    pk-binding-get.binding
     (err:+ "The variable \"" varname "\" is dynamically unbound.")))
 
-(rc:ontype pk-dynenv-get-tl (varname) pk-ad-hoc-env pk-ad-hoc-env
-  (or (!tl-value:or rep.self.varname
-        (err:+ "The variable \"" varname "\" is dynamically "
-               "unbound."))
-      (obj result (pk-dynenv-get self varname))))
+(rc:ontype pk-dynenv-get-meta (varname) pk-ad-hoc-env pk-ad-hoc-env
+  (iflet (binding) (pk-dynenv-get-binding self varname)
+    pk-binding-get-meta.binding
+    (err:+ "The variable \"" varname "\" is dynamically unbound.")))
+
+(rc:ontype pk-dynenv-set-binding (varname binding)
+             pk-ad-hoc-env pk-ad-hoc-env
+  (= rep.self.varname list.binding)
+  binding)
+
+(rc:ontype pk-dynenv-unset-binding (varname binding)
+             pk-ad-hoc-env pk-ad-hoc-env
+  (wipe rep.self.varname))
+
+(rc:ontype pk-dynenv-set (varname new-value)
+             pk-ad-hoc-env pk-ad-hoc-env
+  (iflet (binding) (pk-dynenv-get-binding self varname)
+    (pk-binding-set binding new-value)
+    (do (pk-dynenv-set-binding
+          self varname pk-make-ad-hoc-binding.new-value)
+        new-value)))
+
+(rc:ontype pk-dynenv-set-meta (varname new-value)
+             pk-ad-hoc-env pk-ad-hoc-env
+  (iflet (binding) (pk-dynenv-get-binding self varname)
+    (pk-binding-set-meta binding new-value)
+    (do (pk-dynenv-set-binding
+          self varname pk-make-ad-hoc-binding-meta.new-value)
+        new-value)))
 
 
 ; TODO: Figure out what condition this should really have and how it
@@ -555,14 +691,14 @@
   (zap rep soup)
   (unless (and single.soup (single car.soup))
     (do.fail "The word wasn't simply a single non-character."))
-  (pk-call:!tl:rep:pk-slurp-compile caar.soup staticenv))
+  (pk-call:!meta:rep:pk-slurp-compile caar.soup staticenv))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) one-word
   (zap rep soup)
   (unless (and single.soup (isa car.soup 'string)
             (pk-is-simple-identifier car.soup))
     (do.fail "The word wasn't a simple identifier name."))
-  (pk-call:!tl:rep:pk-staticenv-get-compile-fork
+  (pk-call:!meta:rep:pk-staticenv-get-compile-fork
     staticenv (sym car.soup)))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) nonnegative-integer
@@ -595,9 +731,9 @@
                 (annotate 'pk-lambdacalc-literal
                   (coerce car.soup 'int)))
     (annotate 'pk-compile-fork
-      (obj get  getter
-           tl   getter
-           op   pk-staticenv-default-op-compiler.staticenv))))
+      (obj get   getter
+           meta  getter
+           op    pk-staticenv-default-op-compiler.staticenv))))
 
 (rc:ontype pk-slurp-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
@@ -628,47 +764,55 @@
 ; especially relevant here.
 
 
-(rc:ontype pk-call-tl args pk-tl-fn pk-tl-fn
+(rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
   (apply pk-call rep.self args))
 
-(mr:rule pk-call-tl (op . args) default
-  (obj result (apply pk-call op args)))
+(mr:rule pk-call-meta (op . args) default
+  (pk-meta result (apply pk-call op args)))
 
-(oc:label-prefer-labels-last pk-call-tl-default-last
-  'pk-call-tl 'default)
+(oc:label-prefer-labels-last pk-call-meta-default-last
+  'pk-call-meta 'default)
 
 (rc:ontype pk-call args fn fn
   (apply self args))
 
-(rc:ontype pk-call args pk-tl-fn pk-tl-fn
-  (!result:apply rep.self args))
+(rc:ontype pk-call args pk-fn-meta pk-fn-meta
+  (!result:rep:apply rep.self args))
 
 
-(rc:ontype pk-eval-tl (dynenv) pk-lambdacalc-call pk-lambdacalc-call
-  (obj result (pk-eval self dynenv)))
+(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-call pk-lambdacalc-call
+  (pk-meta result (pk-eval self dynenv)))
 
-(rc:ontype pk-eval-tl (dynenv)
-             pk-lambdacalc-call-tl pk-lambdacalc-call-tl
-  (apply pk-call-tl (accum acc
-                      (each subexpr rep.self
-                        (do.acc:pk-eval subexpr dynenv)))))
+(rc:ontype pk-eval-meta (dynenv)
+             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
+  (apply pk-call-meta (accum acc
+                        (each subexpr rep.self
+                          (do.acc:pk-eval subexpr dynenv)))))
 
-(rc:ontype pk-eval-tl (dynenv)
+(rc:ontype pk-eval-meta (dynenv)
              pk-lambdacalc-literal pk-lambdacalc-literal
-  (obj result (pk-eval self dynenv)))
+  (pk-meta result (pk-eval self dynenv)))
 
-(rc:ontype pk-eval-tl (dynenv) pk-lambdacalc-var pk-lambdacalc-var
-  (obj result (pk-eval self dynenv)))
+(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-var pk-lambdacalc-var
+  (pk-meta result (pk-eval self dynenv)))
 
-(rc:ontype pk-eval-tl (dynenv)
-             pk-lambdacalc-var-tl pk-lambdacalc-var-tl
-  (pk-dynenv-get-tl dynenv rep.self))
+(rc:ontype pk-eval-meta (dynenv)
+             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
+  (pk-dynenv-get-meta dynenv rep.self))
 
-(rc:ontype pk-eval-tl (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval-tl (pk-call rep.self!tl) dynenv))
+(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-set pk-lambdacalc-set
+  (pk-meta result (pk-eval self dynenv)))
 
-(rc:ontype pk-eval-tl (env) pk-soup pk-soup
-  (pk-eval-tl (pk-soup-compile-tl self env) env))
+(rc:ontype pk-eval-meta (dynenv)
+             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
+  (pk-dynenv-set-meta
+    dynenv rep.self.0 (pk-eval-meta rep.self.1 dynenv)))
+
+(rc:ontype pk-eval-meta (dynenv) pk-compile-fork pk-compile-fork
+  (pk-eval-meta (pk-call rep.self!meta) dynenv))
+
+(rc:ontype pk-eval-meta (env) pk-soup pk-soup
+  (pk-eval-meta (pk-soup-compile self env) env))
 
 (rc:ontype pk-eval (dynenv) pk-lambdacalc-call pk-lambdacalc-call
   (apply pk-call (accum acc
@@ -676,8 +820,8 @@
                      (do.acc:pk-eval subexpr dynenv)))))
 
 (rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-call-tl pk-lambdacalc-call-tl
-  (!result:pk-eval-tl self dynenv))
+             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
+  (!result:rep:pk-eval-meta self dynenv))
 
 (rc:ontype pk-eval (dynenv)
              pk-lambdacalc-literal pk-lambdacalc-literal
@@ -686,8 +830,16 @@
 (rc:ontype pk-eval (dynenv) pk-lambdacalc-var pk-lambdacalc-var
   (pk-dynenv-get dynenv rep.self))
 
-(rc:ontype pk-eval (dynenv) pk-lambdacalc-var-tl pk-lambdacalc-var-tl
-  (!result:pk-eval-tl self dynenv))
+(rc:ontype pk-eval (dynenv)
+             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
+  (!result:rep:pk-eval-meta self dynenv))
+
+(rc:ontype pk-eval (dynenv) pk-lambdacalc-set pk-lambdacalc-set
+  (pk-dynenv-set dynenv rep.self.0 (pk-eval rep.self.1 dynenv)))
+
+(rc:ontype pk-eval (dynenv)
+             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
+  (!result:rep:pk-eval-meta self dynenv))
 
 (rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
   (pk-eval (pk-call rep.self!get) dynenv))
@@ -695,8 +847,11 @@
 (rc:ontype pk-eval (env) pk-soup pk-soup
   (pk-eval (pk-soup-compile self env) env))
 
-; TODO: Implement 'pk-eval-tl and 'pk-eval for other kinds of Penknife
-; "lambdacalc" syntax, namely lambdas.
+(rc:ontype pk-eval-tl (env) pk-soup pk-soup
+  (pk-eval-meta (pk-soup-compile-tl self env) env))
+
+; TODO: Implement 'pk-eval-meta and 'pk-eval for other kinds of
+; Penknife "lambdacalc" syntax, namely lambdas.
 
 
 ; TODO: Figure out how global environments are going to work when
@@ -704,40 +859,48 @@
 ;
 ; TODO: Put more functionality in here.
 ;
-(= pk-replenv* (annotate 'pk-ad-hoc-env
-                 (obj demo     (obj value
-                                 (fn () (prn "This is a demo.")))
-                      plus     (obj value +)
-                      drop
-                        (obj value
-                          (annotate 'pk-tl-fn
-                            (fn ((o code 'goodbye))
-                              (obj echoless t quit list.code))))
-                      compose
-                        (obj value
+(= pk-replenv* (annotate 'pk-ad-hoc-env (table)))
+
+(pk-dynenv-set pk-replenv* 'demo (fn () (prn "This is a demo.")))
+
+(pk-dynenv-set pk-replenv* 'plus +)
+
+(pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
+                                   (fn ((o code 'goodbye))
+                                     (pk-meta echoless  t
+                                              quit      list.code))))
+
+(pk-dynenv-set-meta pk-replenv* 'compose
+  (pk-meta result        (fn args
+                           (if no.args idfn
+                             (let (last . rest) rev.args
+                               (zap rev rest)
                                (fn args
-                                 (if no.args idfn
-                                   (let (last . rest) rev.args
-                                     (zap rev rest)
-                                     (fn args
-                                       (ut.foldr pk-call
-                                         (apply pk-call last args)
-                                         rest)))))
-                             compile-fork
-                               (list:pk-compile-fork-from-op
-                                 pk-compose-compiler))
-                      q        (obj value     idfn
-                                    compile-fork
-                                      (list:pk-compile-fork-from-op
-                                        pk-stringquote-compiler))
-                      help
-                        (obj tl-value
-                          (obj echoless  t
-                               action
-                                 (list:fn ()
-                                   (prn "To exit Penknife, use "
-                                        "\"[drop]\", without the "
-                                        "quotes.")))))))
+                                 (ut.foldr pk-call
+                                           (apply pk-call last args)
+                                           rest)))))
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-compose-compiler)))
+
+(pk-dynenv-set-meta pk-replenv* 'q
+  (pk-meta result        idfn
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-stringquote-compiler)))
+
+(pk-dynenv-set-meta pk-replenv* 'help
+  (pk-meta echoless  t
+           action    (list:fn ()
+                       (prn "To exit Penknife, use \"[drop]\", "
+                            "without the quotes."))))
+
+(pk-dynenv-set-meta pk-replenv* 'assign
+  (pk-meta compile-fork  (list:pk-compile-fork-from-op
+                           pk-assign-compiler)))
+
+(pk-dynenv-set-meta pk-replenv* 'assign-meta
+  (pk-meta compile-fork  (list:pk-compile-fork-from-op
+                           pk-assignmeta-compiler)))
+
 
 ; NOTE: On Rainbow, (stdin), of all things, produces an error. When
 ; that happens, we go get it ourselves.
@@ -760,12 +923,12 @@
                 rep.str!ready)
         (pr "pk> "))
       (aif (start-word&finish-bracket-word comment-ignorer.str)
-        (let tl-result (pk-eval-tl it pk-replenv*)
-          (awhen do.tl-result!action
+        (let meta (pk-eval-tl it pk-replenv*)
+          (awhen rep.meta!action
             (pk-call car.it))
-          (unless do.tl-result!echoless
-            (write do.tl-result!result)
+          (unless rep.meta!echoless
+            (write rep.meta!result)
             (prn))
-          (whenlet (quit) do.tl-result!quit
+          (whenlet (quit) rep.meta!quit
             list.quit))
         list!goodbye))))
