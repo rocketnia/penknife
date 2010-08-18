@@ -100,7 +100,7 @@
 ; (otokens seq (o test whitec))
 ;
 ; (soup->string soup)
-; (slurp->string self)  ; rulebook
+; (sip->string self)   ; rulebook
 ;
 ; (pk-compile-literal-from-thunk thunk staticenv)
 ; (pk-function-call-compiler compiled-op body staticenv)
@@ -129,9 +129,9 @@
 ; (pk-dynenv-set-meta self varname)             ; rulebook
 ;
 ; (pk-is-simple-identifier x)
-; (pk-soup-compile-tl soup staticenv)    ; rulebook
-; (pk-soup-compile soup staticenv)       ; rulebook
-; (pk-slurp-compile brackets staticenv)  ; rulebook
+; (pk-soup-compile-tl soup staticenv)  ; rulebook
+; (pk-soup-compile soup staticenv)     ; rulebook
+; (pk-sip-compile self staticenv)      ; rulebook
 ;
 ; (pk-call-meta self . args)  ; rulebook
 ; (pk-call self . args)       ; rulebook
@@ -160,17 +160,17 @@
 ;                 returns nil.
 ;
 ; pk-soup
-;   rep: A tagged proper list containing strings and proper lists of
-;        non-characters. This is merely a list format which is
-;        specialized for representing contiguous stretches of
-;        characters as strings internally. An element of a pk-soup is
-;        called a "slurp".
+;   rep: A tagged proper list containing nonempty sequences (called
+;        "slurps") which contain arbitrary elements (called "sips").
+;        This is merely a list format which is specialized for holding
+;        elements that make sense to keep in dedicated string types,
+;        such as characters and bytes.
 ;
 ; pk-bracketed-soup
 ;   rep: A value of type 'pk-soup. This is soup which is semantically
 ;        understood as being the interior of a pair of brackets. It
-;        often appears as a slurp in another pk-bracketed-soup's soup
-;        in order to represent nested brackets.
+;        often appears as a sip in another pk-bracketed-soup's soup in
+;        order to represent nested brackets.
 ;
 ; pk-lambdacalc-literal
 ;   rep: The value for this expression to evaluate to.
@@ -240,14 +240,14 @@
 ;                returns a 'pk-compile-fork value representing the
 ;                compiled expression.
 ;
-; pk-slurp-compose
+; pk-sip-compose
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A nonempty proper list of 'pk-soup values representing
 ;             uncompiled operator expressions to apply in reverse
 ;             order, in series, to the body. If there is only one
 ;             operator, it will be applied to the body directly.
 ;             Otherwise, the first operator will be applied to a
-;             new 'pk-slurp-compose value containing the rest of the
+;             new 'pk-sip-compose value containing the rest of the
 ;             composition information.
 ;   rep._.1:  A 'pk-soup value representing the uncompiled body to
 ;             apply the operators to.
@@ -529,10 +529,15 @@
 (def soup->string (soup)
   ; NOTE: On Rainbow, (apply string '("something")) and
   ; (string '("something")) don't have the same result.
-  (apply string
-    (map [case type._ string _ (map slurp->string _)] rep.soup)))
+  (apply string (map slurp->string rep.soup)))
 
-(rc:ontype slurp->string () pk-bracketed-soup pk-bracketed-soup
+(rc:ontype slurp->string () string string
+  self)
+
+(rc:ontype slurp->string () rc.list list
+  (map sip->string self))
+
+(rc:ontype sip->string () pk-bracketed-soup pk-bracketed-soup
   (+ "[" (soup->string rep.self) "]"))
 
 
@@ -569,7 +574,7 @@
 ; on the compiler of "a" and a body of this format:
 ;
 ;   (annotate 'pk-soup
-;     (list:list:annotate 'pk-slurp-compose
+;     (list:list:annotate 'pk-sip-compose
 ;       (list (list (annotate 'pk-soup (list "b"))
 ;                   (annotate 'pk-soup (list "c")))
 ;             (annotate 'pk-soup (list " d e")))))))
@@ -603,7 +608,7 @@
                        compiled-composed-op
                        (case cdr.token-args nil body2
                          (annotate 'pk-soup
-                           (list:list:annotate 'pk-slurp-compose
+                           (list:list:annotate 'pk-sip-compose
                              (list cdr.token-args body2))))
                        staticenv2)))))))
 
@@ -741,11 +746,11 @@
   (case type.x string
     (all (orf letter [pos _ "+-*/<=>"]) x)))
 
-(mr:rule pk-soup-compile-tl (soup staticenv) one-slurp
+(mr:rule pk-soup-compile-tl (soup staticenv) one-sip
   (zap rep soup)
   (unless (and single.soup (single car.soup))
     (do.fail "The word wasn't simply a single non-character."))
-  (pk-call:!meta:rep:pk-slurp-compile caar.soup staticenv))
+  (pk-call:!meta:rep:pk-sip-compile caar.soup staticenv))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) one-word
   (zap rep soup)
@@ -763,11 +768,11 @@
   (annotate 'pk-lambdacalc-literal
     (coerce car.soup 'int)))
 
-(mr:rule pk-soup-compile (soup staticenv) one-slurp
+(mr:rule pk-soup-compile (soup staticenv) one-sip
   (zap rep soup)
   (unless (and single.soup (single car.soup))
     (do.fail "The word wasn't simply a single non-character."))
-  (pk-slurp-compile caar.soup staticenv))
+  (pk-sip-compile caar.soup staticenv))
 
 (mr:rule pk-soup-compile (soup staticenv) one-word
   (zap rep soup)
@@ -784,7 +789,7 @@
   (pk-compile-literal-from-thunk
     (fn () (coerce car.soup 'int)) staticenv))
 
-(rc:ontype pk-slurp-compile (staticenv)
+(rc:ontype pk-sip-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
   (zap rep self)
   (iflet (margin op rest) o-split-first-token.self
@@ -792,8 +797,7 @@
       (pk-call rep.compiled-op!op compiled-op rest staticenv))
     (fail "The syntax was an empty pair of brackets.")))
 
-(rc:ontype pk-slurp-compile (staticenv)
-             pk-slurp-compose pk-slurp-compose
+(rc:ontype pk-sip-compile (staticenv) pk-sip-compose pk-sip-compose
   (let (ops body) rep.self
     (iflet (first . rest) ops
       (let compiled-op (pk-soup-compile first staticenv)
@@ -801,7 +805,7 @@
           compiled-op
           (if rest
             (annotate 'pk-soup
-              (list:list:annotate 'pk-slurp-compose (list rest body)))
+              (list:list:annotate 'pk-sip-compose (list rest body)))
             body)
           staticenv))
       (fail:+ "The syntax was a composition form with nothing "
