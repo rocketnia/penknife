@@ -1090,14 +1090,12 @@
   (car:catch:until:only.throw:on-err [do (prn "Error: " details._)
                                          nil]
     (fn ()
-      (unless (when rep.str!ready
-                ; Shave off any newline remaining from the last input.
-                ; Thanks to the fact that we're using
-                ; 'newline-normalizer, we don't have to worry about
-                ; "\r" and "\r\n" sequences.
-                (case rep.str!peek #\newline
-                  rep.str!read)
-                rep.str!ready)
+      ; Show the prompt unless there's a non-whitespace character
+      ; ready.
+      (unless (catch:while rep.str!ready
+                (if (whitec rep.str!peek)
+                  rep.str!read
+                  throw.t))
         (pr "pk> "))
       (aif (start-word&finish-bracket-word comment-ignorer.str)
         (let meta (pk-eval-tl it pk-replenv*)
