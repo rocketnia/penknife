@@ -128,7 +128,10 @@
 ; (pk-dynenv-set self varname)                  ; rulebook
 ; (pk-dynenv-set-meta self varname)             ; rulebook
 ;
-; (pk-is-simple-identifier x)
+; (pk-alpha-id-char x)
+; (pk-infix-id-char x)
+; (pk-string-identifier x)
+; (pk-soup-identifier x)
 ; (pk-soup-compile-tl soup staticenv)  ; rulebook
 ; (pk-soup-compile soup staticenv)     ; rulebook
 ; (pk-sip-compile self staticenv)      ; rulebook
@@ -497,7 +500,7 @@
                     do.acc.after)))
     (map [annotate 'pk-soup rev._] (list self margin))))
 
-; This is used internally by oi!oempty.
+; This is used internally by oi!oempty and oi!olen>.
 (rc:ontype oi.olen< (number) pk-soup pk-soup
   (and (< 0 number)
        (catch:~each slurp rep.self
@@ -511,7 +514,6 @@
     (awhen (check (o-ltrim rest ~test) ~oi.oempty:car)
       (cons margin it))))
 
-; TODO: Use this for left-associative infix syntax.
 (def o-split-last-token (seq (o test whitec))
   (zap testify test)
   (let (rest margin) (o-rtrim seq test)
@@ -564,9 +566,6 @@
                      call.compile-op-and-body))
            op    pk-staticenv-default-op-compiler.staticenv))))
 
-; TODO: Figure out a better string syntax. Currently,
-; [q Hello, world!] compiles to a literal " Hello, world!", with a
-; space at the beginning and everything.
 (def pk-stringquote-compiler (compiled-op body staticenv)
   (pk-compile-literal-from-thunk (fn () soup->string.body) staticenv))
 
@@ -615,14 +614,11 @@
 (def pk-assign-compiler (compiled-op body staticenv)
   (let token-args otokens.body
     (unless (is len.token-args 2)
-      (err "An assignment body had more than two words in it."))
+      (err "An assignment body didn't have exactly two words in it."))
     (let (var val-token) token-args
-      (zap rep var)
-      (unless (and single.var (isa car.var 'string)
-                (pk-is-simple-identifier car.var))
-        (err:+ "A name in an assignment form wasn't a simple "
-               "identifier."))
-      (zap sym:car var)
+      (unless pk-soup-identifier.var
+        (err "A name in an assignment form wasn't an identifier."))
+      (zap sym:car:rep var)
       (let getter (memo:fn ()
                     (annotate 'pk-lambdacalc-set
                       (list var (pk-call:!get:rep:pk-soup-compile
@@ -635,14 +631,11 @@
 (def pk-assignmeta-compiler (compiled-op body staticenv)
   (let token-args otokens.body
     (unless (is len.token-args 2)
-      (err "An assignment body had more than two words in it."))
+      (err "An assignment body didn't have exactly two words in it."))
     (let (var val-token) token-args
-      (zap rep var)
-      (unless (and single.var (isa car.var 'string)
-                (pk-is-simple-identifier car.var))
-        (err:+ "A name in an assignment form wasn't a simple "
-               "identifier."))
-      (zap sym:car var)
+      (unless pk-soup-identifier.var
+        (err "A name in an assignment form wasn't an identifier."))
+      (zap sym:car:rep var)
       (let getter (memo:fn ()
                     (annotate 'pk-lambdacalc-set-meta
                       (list var (pk-call:!meta:rep:pk-soup-compile
@@ -740,33 +733,24 @@
         new-value)))
 
 
-; TODO: Figure out what condition this should really have and how it
-; should relate to ssyntax.
-(def pk-is-simple-identifier (x)
+; For efficiency, this assumes the argument is a character.
+(def pk-alpha-id-char (x)
+  (or letter.x (pos x "+-*/<=>") (< 255 int.x)))
+
+; For efficiency, this assumes the argument is a character.
+(def pk-infix-id-char (x)
+  (~or (<= int.x 32) digit.x pk-alpha-id-char.x))
+
+(def pk-string-identifier (x)
   (case type.x string
-    (all (orf letter [pos _ "+-*/<=>"]) x)))
+    (or (all pk-alpha-id-char x) (all pk-infix-id-char x))))
 
-(mr:rule pk-soup-compile-tl (soup staticenv) one-sip
-  (zap rep soup)
-  (unless (and single.soup (single car.soup))
-    (do.fail "The word wasn't simply a single non-character."))
-  (pk-call:!meta:rep:pk-sip-compile caar.soup staticenv))
+(def pk-soup-identifier (x)
+  (case type.x pk-soup
+    (and (single rep.x) (pk-string-identifier rep.x.0))))
 
-(mr:rule pk-soup-compile-tl (soup staticenv) one-word
-  (zap rep soup)
-  (unless (and single.soup (isa car.soup 'string)
-            (pk-is-simple-identifier car.soup))
-    (do.fail "The word wasn't a simple identifier name."))
-  (pk-call:!meta:rep:pk-staticenv-get-compile-fork
-    staticenv (sym car.soup)))
-
-(mr:rule pk-soup-compile-tl (soup staticenv) nonnegative-integer
-  (zap rep soup)
-  (unless (and single.soup (isa car.soup 'string)
-            (all digit car.soup))
-    (do.fail "The word wasn't a nonnegative decimal integer."))
-  (annotate 'pk-lambdacalc-literal
-    (coerce car.soup 'int)))
+(mr:rule pk-soup-compile-tl (soup staticenv) expression
+  (pk-call:!meta:rep:pk-soup-compile soup staticenv))
 
 (mr:rule pk-soup-compile (soup staticenv) one-sip
   (zap rep soup)
@@ -774,12 +758,10 @@
     (do.fail "The word wasn't simply a single non-character."))
   (pk-sip-compile caar.soup staticenv))
 
-(mr:rule pk-soup-compile (soup staticenv) one-word
-  (zap rep soup)
-  (unless (and single.soup (isa car.soup 'string)
-            (pk-is-simple-identifier car.soup))
-    (do.fail "The word wasn't a simple identifier name."))
-  (pk-staticenv-get-compile-fork staticenv (sym car.soup)))
+(mr:rule pk-soup-compile (soup staticenv) identifier
+  (unless pk-soup-identifier.soup
+    (do.fail "The word wasn't an identifier."))
+  (pk-staticenv-get-compile-fork staticenv (sym:car:rep soup)))
 
 (mr:rule pk-soup-compile (soup staticenv) nonnegative-integer
   (zap rep soup)
@@ -789,13 +771,39 @@
   (pk-compile-literal-from-thunk
     (fn () (coerce car.soup 'int)) staticenv))
 
+(mr:rule pk-soup-compile (soup staticenv) infix
+  (iflet (left op right) (o-split-last-token soup
+                           [~case type._ char pk-infix-id-char._])
+    (if oi.oempty.left
+      (do.fail:+ "The word started with its only infix operator, so "
+                 "it wasn't an infix form.")
+      (withs (compiled-op    (pk-soup-compile op staticenv)
+              compiled-left  (pk-call rep.compiled-op!op
+                               compiled-op left staticenv))
+        (pk-call rep.compiled-left!op compiled-left right staticenv)))
+    (do.fail "The word didn't contain an infix operator.")))
+
+(mr:rule pk-soup-compile (soup staticenv) prefix
+  (let (op bodies) (o-rtrim soup rc.a-!pk-bracketed-soup)
+    (unless (or (and oi.oempty.op (oi.olen> bodies 1))
+                (and pk-soup-identifier.op (oi.olen> bodies 0)))
+      (do.fail:+ "The word wasn't a series of bracketed bodies "
+                 "preceded by a bracket form or an identifier."))
+    (zap car:rep bodies)
+    (= op (if oi.oempty.op
+            (pk-sip-compile pop.bodies staticenv)
+            (pk-soup-compile op staticenv)))
+    (each body (map rep bodies)
+      (zap [pk-call rep._!op _ body staticenv] op))
+    op))
+
 (rc:ontype pk-sip-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
   (zap rep self)
   (iflet (margin op rest) o-split-first-token.self
     (let compiled-op (pk-soup-compile op staticenv)
       (pk-call rep.compiled-op!op compiled-op rest staticenv))
-    (fail "The syntax was an empty pair of brackets.")))
+    (do.fail "The syntax was an empty pair of brackets.")))
 
 (rc:ontype pk-sip-compile (staticenv) pk-sip-compose pk-sip-compose
   (let (ops body) rep.self
@@ -808,13 +816,8 @@
               (list:list:annotate 'pk-sip-compose (list rest body)))
             body)
           staticenv))
-      (fail:+ "The syntax was a composition form with nothing "
-              "composed."))))
-
-; TODO: Implement 'pk-soup-compile-tl and 'pk-soup-compile for other
-; kinds of soup words, and figure out whether the two will actually be
-; any different. Ssyntax and data structure syntax are probably
-; especially relevant here.
+      (do.fail:+ "The syntax was a composition form with nothing "
+                 "composed."))))
 
 
 (rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
