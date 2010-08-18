@@ -92,9 +92,12 @@
 ; (finish-bracket-word str (o test whitec))
 ; (finish-brackets (str))
 ;
-; (soup-split-ltrim soup (o test whitec))
-; (soup-split-first-token soup (o test whitec))
-; (soup-tokens soup (o test whitec))
+; (orev self)                                ; rulebook
+; (o-ltrim self (o test whitec))             ; rulebook
+; (o-rtrim self (o test whitec))             ; rulebook
+; (o-split-first-token seq (o test whitec))
+; (o-split-last-token seq (o test whitec))
+; (otokens seq (o test whitec))
 ;
 ; (soup->string soup)
 ; (slurp->string self)  ; rulebook
@@ -305,6 +308,7 @@
                   mr do.lathe!multival/multirule
                   oc do.lathe!multival/order-contribs
                   rc do.lathe!orc/orc
+                  oi do.lathe!orc/oiter
                   sn do.lathe!imp/sniff
                   jv do.lathe!imp/jvm))
 
@@ -447,31 +451,79 @@
        rep.str!read))
 
 
-(def soup-split-ltrim (soup (o test whitec))
-  (zap rep soup)
-  (zap complement:testify test)
-  (let prefix (accum acc
-                (catch:while soup
-                  (let slurp pop.soup
-                    (only.throw:awhen (pos test slurp)
-                      (let (firstpart rest) (split slurp it)
-                        (push rest soup)
-                        (case it 0 t
-                          do.acc.firstpart)))
-                    do.acc.slurp)))
-    (map [annotate 'pk-soup _] (list prefix soup))))
+(rc:ontype orev () string string
+  (tostring:down i (- len.self 1) 0
+    (writec self.i)))
 
-(def soup-split-first-token (soup (o test whitec))
+(rc:ontype o-ltrim ((o test whitec)) rc.list list
+  (aif (pos (complement testify.test) self)
+    (split self it)
+    (list self nil)))
+
+(rc:ontype o-ltrim ((o test whitec)) string string
+  (aif (pos (complement testify.test) self)
+    (split self it)
+    (list self "")))
+
+(rc:ontype o-ltrim ((o test whitec)) pk-soup pk-soup
+  (zap rep self)
+  (let margin (accum acc
+                (catch:while self
+                  (let (before rest) (o-ltrim pop.self test)
+                    (unless oi.oempty.rest
+                      (push rest self)
+                      (unless oi.oempty.before
+                        do.acc.before)
+                      throw.nil)
+                    do.acc.before)))
+    (map [annotate 'pk-soup _] (list margin self))))
+
+(rc:ontype o-rtrim ((o test whitec)) rc.list list
+  (map rev (rev:o-ltrim rev.self test)))
+
+(rc:ontype o-rtrim ((o test whitec)) string string
+  (map orev (rev:o-ltrim orev.self test)))
+
+(rc:ontype o-rtrim ((o test whitec)) pk-soup pk-soup
+  (zap rev:rep self)
+  (let margin (accum acc
+                (catch:while self
+                  (let (rest after) (o-rtrim pop.self test)
+                    (unless oi.oempty.rest
+                      (push rest self)
+                      (unless oi.oempty.after
+                        do.acc.after)
+                      throw.nil)
+                    do.acc.after)))
+    (map [annotate 'pk-soup rev._] (list self margin))))
+
+; This is used internally by oi!oempty.
+(rc:ontype oi.olen< (number) pk-soup pk-soup
+  (and (< 0 number)
+       (catch:~each slurp rep.self
+         (unless (oi.olen< slurp number)
+           throw.nil)
+         (-- number oi.olen.slurp))))
+
+(def o-split-first-token (seq (o test whitec))
   (zap testify test)
-  (let (_ trimmed) (soup-split-ltrim soup test)
-    (check (soup-split-ltrim trimmed ~test) rep:car)))
+  (let (margin rest) (o-ltrim seq test)
+    (awhen (check (o-ltrim rest ~test) ~oi.oempty:car)
+      (cons margin it))))
 
-(def soup-tokens (soup (o test whitec))
+; TODO: Use this for left-associative infix syntax.
+(def o-split-last-token (seq (o test whitec))
+  (zap testify test)
+  (let (rest margin) (o-rtrim seq test)
+    (awhen (check (o-rtrim rest ~test) ~oi.oempty:cadr)
+      (join it list.margin))))
+
+(def otokens (seq (o test whitec))
   (zap testify test)
   (accum acc
-    (ut:dstwhilet (token rest) (soup-split-first-token soup test)
+    (ut:dstwhilet (margin token rest) (o-split-first-token seq test)
       do.acc.token
-      (= soup rest))))
+      (= seq rest))))
 
 
 (def soup->string (soup)
@@ -497,7 +549,7 @@
                              (cons (pk-call rep.compiled-op!get)
                                (map [pk-call:!get:rep:pk-soup-compile
                                       _ staticenv]
-                                    soup-tokens.body)))
+                                    otokens.body)))
     (annotate 'pk-compile-fork
       (obj get   (memo:fn ()
                    (annotate 'pk-lambdacalc-call
@@ -523,7 +575,7 @@
 ;             (annotate 'pk-soup (list " d e")))))))
 ;
 (def pk-compose-compiler (compiled-op body staticenv)
-  (withs (token-args           soup-tokens.body
+  (withs (token-args           otokens.body
           compile-first-arg    (memo:fn ()
                                  (if token-args
                                    (pk-soup-compile car.token-args
@@ -556,7 +608,7 @@
                        staticenv2)))))))
 
 (def pk-assign-compiler (compiled-op body staticenv)
-  (let token-args soup-tokens.body
+  (let token-args otokens.body
     (unless (is len.token-args 2)
       (err "An assignment body had more than two words in it."))
     (let (var val-token) token-args
@@ -576,7 +628,7 @@
                op    pk-staticenv-default-op-compiler.staticenv))))))
 
 (def pk-assignmeta-compiler (compiled-op body staticenv)
-  (let token-args soup-tokens.body
+  (let token-args otokens.body
     (unless (is len.token-args 2)
       (err "An assignment body had more than two words in it."))
     (let (var val-token) token-args
@@ -735,7 +787,7 @@
 (rc:ontype pk-slurp-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
   (zap rep self)
-  (iflet (op rest) soup-split-first-token.self
+  (iflet (margin op rest) o-split-first-token.self
     (let compiled-op (pk-soup-compile op staticenv)
       (pk-call rep.compiled-op!op compiled-op rest staticenv))
     (fail "The syntax was an empty pair of brackets.")))
