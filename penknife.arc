@@ -92,12 +92,16 @@
 ; (finish-bracket-word str (o test whitec))
 ; (finish-brackets (str))
 ;
-; (orev self)                                ; rulebook
-; (o-ltrim self (o test whitec))             ; rulebook
-; (o-rtrim self (o test whitec))             ; rulebook
-; (o-split-first-token seq (o test whitec))
-; (o-split-last-token seq (o test whitec))
-; (otokens seq (o test whitec))
+; (soup-whitec x)
+; (orev self)                                     ; rulebook
+; (o-ltrim self (o test soup-whitec))             ; rulebook
+; (o-rtrim self (o test soup-whitec))             ; rulebook
+; (o-split-first-token seq (o test soup-whitec))
+; (o-split-last-token seq (o test soup-whitec))
+; (otokens seq (o test soup-whitec))
+; (slurp+ self other)                             ; rulebook
+; (o+binary self other)                           ; rulebook
+; (o+ first . rest)
 ;
 ; (soup->string soup)
 ; (sip->string self)   ; rulebook
@@ -108,6 +112,8 @@
 ; (pk-compose-compiler compiled-op body staticenv)
 ; (pk-assign-compiler compiled-op body staticenv)
 ; (pk-assignmeta-compiler compiled-op body staticenv)
+; (pk-infix-call-compiler compiled-op body staticenv)
+; (pk-generic-infix-compiler base-compiler)
 ;
 ; (pk-meta . args)                      ; macro
 ; (pk-make-ad-hoc-binding value)
@@ -143,6 +149,7 @@
 ; (pk-eval self dynenv)       ; rulebook
 ; (pk-eval-tl self dynenv)    ; rulebook
 ;
+; (pk-compose . args)
 ; pk-replenv*                       ; value of type 'pk-ad-hoc-env
 ; (pkrepl (o str (errsafe:stdin)))
 ;
@@ -168,6 +175,10 @@
 ;        This is merely a list format which is specialized for holding
 ;        elements that make sense to keep in dedicated string types,
 ;        such as characters and bytes.
+;
+; pk-soup-whitec
+;   rep: Ignored. This value indicates a whitespace sip that doesn't
+;        correspond to any particular character.
 ;
 ; pk-bracketed-soup
 ;   rep: A value of type 'pk-soup. This is soup which is semantically
@@ -454,11 +465,14 @@
        rep.str!read))
 
 
+(def soup-whitec (x)
+  (case type.x char whitec.x rc.a-!pk-soup-whitec.x))
+
 (rc:ontype orev () string string
   (tostring:down i (- len.self 1) 0
     (writec self.i)))
 
-(rc:ontype o-ltrim ((o test whitec)) rc.list list
+(rc:ontype o-ltrim ((o test soup-whitec)) rc.list list
   (aif (pos (complement testify.test) self)
     (split self it)
     (list self nil)))
@@ -468,7 +482,7 @@
     (split self it)
     (list self "")))
 
-(rc:ontype o-ltrim ((o test whitec)) pk-soup pk-soup
+(rc:ontype o-ltrim ((o test soup-whitec)) pk-soup pk-soup
   (zap rep self)
   (let margin (accum acc
                 (catch:while self
@@ -481,13 +495,13 @@
                     do.acc.before)))
     (map [annotate 'pk-soup _] (list margin self))))
 
-(rc:ontype o-rtrim ((o test whitec)) rc.list list
+(rc:ontype o-rtrim ((o test soup-whitec)) rc.list list
   (map rev (rev:o-ltrim rev.self test)))
 
 (rc:ontype o-rtrim ((o test whitec)) string string
   (map orev (rev:o-ltrim orev.self test)))
 
-(rc:ontype o-rtrim ((o test whitec)) pk-soup pk-soup
+(rc:ontype o-rtrim ((o test soup-whitec)) pk-soup pk-soup
   (zap rev:rep self)
   (let margin (accum acc
                 (catch:while self
@@ -508,24 +522,65 @@
            throw.nil)
          (-- number oi.olen.slurp))))
 
-(def o-split-first-token (seq (o test whitec))
+(def o-split-first-token (seq (o test soup-whitec))
   (zap testify test)
   (let (margin rest) (o-ltrim seq test)
     (awhen (check (o-ltrim rest ~test) ~oi.oempty:car)
       (cons margin it))))
 
-(def o-split-last-token (seq (o test whitec))
+(def o-split-last-token (seq (o test soup-whitec))
   (zap testify test)
   (let (rest margin) (o-rtrim seq test)
     (awhen (check (o-rtrim rest ~test) ~oi.oempty:cadr)
       (join it list.margin))))
 
-(def otokens (seq (o test whitec))
+(def otokens (seq (o test soup-whitec))
   (zap testify test)
   (accum acc
     (ut:dstwhilet (margin token rest) (o-split-first-token seq test)
       do.acc.token
       (= seq rest))))
+
+; TODO: We should really use some kind of multiple dispatch for
+; 'slurp+ and 'o+binary.
+
+(rc:ontype slurp+ (other) rc.list list-and-list
+  (unless (.other:rc.a- rc!list)
+    (do.fail "The second argument didn't match the type \"list\"."))
+  (list:+ self other))
+
+(rc:ontype slurp+ (other) rc.list list-and-string
+  (unless rc.a-!string.other
+    (do.fail "The second argument didn't match the type \"string\"."))
+  (list self other))
+
+(rc:ontype slurp+ (other) string string-and-list
+  (unless (.other:rc.a- rc!list)
+    (do.fail "The second argument didn't match the type \"list\"."))
+  (list self other))
+
+(rc:ontype slurp+ (other) string string-and-string
+  (unless rc.a-!string.other
+    (do.fail "The second argument didn't match the type \"string\"."))
+  (list:+ self other))
+
+(rc:ontype o+binary (other) pk-soup pk-soup-and-pk-soup
+  (unless rc.a-!pk-soup.other
+    (do.fail:+ "The second argument didn't match the type "
+               "\"pk-soup\"."))
+  (if oi.oempty.self   other
+      oi.oempty.other  self
+    (withs (rep-self rep.self
+            ; NOTE: Jarc is fine with (let (x (y)) z ...), but it
+            ; doesn't allow (let ((x) y) z ...).
+            (before (self-slurp))  (split rep-self (- len.rep-self 1))
+            (other-slurp after)  (split rep.other 1))
+      (zap car other-slurp)
+      (annotate 'pk-soup
+        (join before (slurp+ self-slurp other-slurp) after)))))
+
+(def o+ (first . rest)
+  (ut.foldl o+binary first rest))
 
 
 (def soup->string (soup)
@@ -644,6 +699,58 @@
           (obj get   getter
                meta  getter
                op    pk-staticenv-default-op-compiler.staticenv))))))
+
+(def pk-infix-call-compiler (compiled-op body staticenv)
+  (let token-args otokens.body
+    (unless single.token-args
+      (err "A \".\" body didn't have exactly one word in it."))
+    (pk-soup-compile car.token-args staticenv)))
+
+(def pk-generic-infix-compiler (base-compiler)
+  (fn (compiled-op1 body1 staticenv1)
+    (let compile-call  (memo:fn ()
+                         (map pk-call:!get:rep
+                           (cons compiled-op1
+                             (map [pk-soup-compile _ staticenv1]
+                               otokens.body1))))
+      (annotate 'pk-compile-fork
+        (obj get   (memo:fn ()
+                     (annotate 'pk-lambdacalc-call
+                       call.compile-call))
+             meta  (memo:fn ()
+                     (annotate 'pk-lambdacalc-call-meta
+                       call.compile-call))
+             op    (fn (compiled-op2 body2 staticenv2)
+                     (with (compile-call  (memo:fn ()
+                                            (map pk-call:!get:rep
+                                              (cons compiled-op2
+                                                (map [pk-soup-compile
+                                                       _ staticenv2]
+                                                  otokens.body2))))
+                            compile-op
+                              (memo:fn ()
+                                (!op:rep:do.base-compiler
+                                  compiled-op1
+                                  (o+ body1
+                                      (annotate 'pk-soup
+                                        (list:list:annotate
+                                          'pk-soup-whitec nil))
+                                      body2)
+                                  staticenv2)))
+                       (annotate 'pk-compile-fork
+                         (obj get   (memo:fn ()
+                                      (annotate 'pk-lambdacalc-call
+                                        call.compile-call))
+                              meta  (memo:fn ()
+                                      (annotate
+                                        'pk-lambdacalc-call-meta
+                                        call.compile-call))
+                              op
+                                (fn (compiled-op3 body3 staticenv3)
+                                  (pk-call call.compile-op
+                                           compiled-op3
+                                           body3
+                                           staticenv3)))))))))))
 
 
 (mac pk-meta args
@@ -910,6 +1017,13 @@
 ; Penknife "lambdacalc" syntax, namely lambdas.
 
 
+(def pk-compose args
+  (if no.args idfn
+    (let (last . rest) rev.args
+      (zap rev rest)
+      (fn args
+        (ut.foldr pk-call (apply pk-call last args) rest)))))
+
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
 ;
@@ -927,14 +1041,7 @@
                                               quit      list.code))))
 
 (pk-dynenv-set-meta pk-replenv* 'compose
-  (pk-meta result        (fn args
-                           (if no.args idfn
-                             (let (last . rest) rev.args
-                               (zap rev rest)
-                               (fn args
-                                 (ut.foldr pk-call
-                                           (apply pk-call last args)
-                                           rest)))))
+  (pk-meta result        pk-compose
            compile-fork  (list:pk-compile-fork-from-op
                            pk-compose-compiler)))
 
@@ -956,6 +1063,20 @@
 (pk-dynenv-set-meta pk-replenv* 'assign-meta
   (pk-meta compile-fork  (list:pk-compile-fork-from-op
                            pk-assignmeta-compiler)))
+
+(pk-dynenv-set-meta pk-replenv* ':
+  (pk-meta result        (fn args1
+                           (fn args2
+                             (apply pk-compose (join args1 args2))))
+           compile-fork  (list:pk-compile-fork-from-op
+                           (pk-generic-infix-compiler
+                             pk-compose-compiler))))
+
+; NOTE: Both Rainbow *and* Jarc consider (string '|.|) to be "|.|".
+(pk-dynenv-set-meta pk-replenv* (sym ".")
+  (pk-meta result        idfn
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-infix-call-compiler)))
 
 
 ; NOTE: On Rainbow, (stdin), of all things, produces an error. When
