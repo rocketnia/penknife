@@ -685,7 +685,7 @@
         (err "A name in an assignment form wasn't an identifier."))
       (zap sym:car:rep var)
       (pk-compile-leaf-from-thunk staticenv
-        (memo:thunk:annotate 'pk-lambdacalc-set
+        (thunk:annotate 'pk-lambdacalc-set
           (list var (pk-call:!get:rep:pk-soup-compile
                       val-token staticenv)))))))
 
@@ -698,7 +698,7 @@
         (err "A name in an assignment form wasn't an identifier."))
       (zap sym:car:rep var)
       (pk-compile-leaf-from-thunk staticenv
-        (memo:thunk:annotate 'pk-lambdacalc-set-meta
+        (thunk:annotate 'pk-lambdacalc-set-meta
           (list var (pk-call:!meta:rep:pk-soup-compile
                       val-token staticenv)))))))
 
