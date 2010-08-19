@@ -613,12 +613,10 @@
                                       _ staticenv]
                                     otokens.body)))
     (annotate 'pk-compile-fork
-      (obj get   (memo:fn ()
-                   (annotate 'pk-lambdacalc-call
-                     call.compile-op-and-body))
-           meta  (memo:fn ()
-                   (annotate 'pk-lambdacalc-call-meta
-                     call.compile-op-and-body))
+      (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
+                               call.compile-op-and-body))
+           meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
+                               call.compile-op-and-body))
            op    pk-staticenv-default-op-compiler.staticenv))))
 
 (def pk-stringquote-compiler (compiled-op body staticenv)
@@ -650,12 +648,10 @@
                                                 _ staticenv]
                                            cdr.token-args)))))))
     (annotate 'pk-compile-fork
-      (obj get   (memo:fn ()
-                   (annotate 'pk-lambdacalc-call
-                     call.compile-op-and-body))
-           meta  (memo:fn ()
-                   (annotate 'pk-lambdacalc-call-meta
-                     call.compile-op-and-body))
+      (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
+                               call.compile-op-and-body))
+           meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
+                               call.compile-op-and-body))
            op    (fn (compiled-op2 body2 staticenv2)
                    (let compiled-composed-op call.compile-first-arg
                      (pk-call rep.compiled-composed-op!op
@@ -714,39 +710,36 @@
                              (map [pk-soup-compile _ staticenv1]
                                otokens.body1))))
       (annotate 'pk-compile-fork
-        (obj get   (memo:fn ()
-                     (annotate 'pk-lambdacalc-call
-                       call.compile-call))
-             meta  (memo:fn ()
-                     (annotate 'pk-lambdacalc-call-meta
-                       call.compile-call))
-             op    (fn (compiled-op2 body2 staticenv2)
-                     (with (compile-call  (memo:fn ()
-                                            (map pk-call:!get:rep
-                                              (cons compiled-op2
-                                                (map [pk-soup-compile
-                                                       _ staticenv2]
-                                                  otokens.body2))))
-                            compile-op
-                              (memo:fn ()
-                                (!op:rep:do.base-compiler
-                                  compiled-op1
-                                  (o+ body1
-                                      (annotate 'pk-soup
-                                        (list:list:annotate
-                                          'pk-soup-whitec nil))
-                                      body2)
-                                  staticenv2)))
-                       (annotate 'pk-compile-fork
-                         (obj get   (memo:fn ()
-                                      (annotate 'pk-lambdacalc-call
-                                        call.compile-call))
-                              meta  (memo:fn ()
-                                      (annotate
-                                        'pk-lambdacalc-call-meta
-                                        call.compile-call))
-                              op
-                                (fn (compiled-op3 body3 staticenv3)
+        (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
+                                 call.compile-call))
+             meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
+                                 call.compile-call))
+             op
+               (fn (compiled-op2 body2 staticenv2)
+                 (with (compile-call  (memo:fn ()
+                                        (map pk-call:!get:rep
+                                          (cons compiled-op2
+                                            (map [pk-soup-compile
+                                                   _ staticenv2]
+                                              otokens.body2))))
+                        compile-op
+                          (memo:fn ()
+                            (!op:rep:do.base-compiler
+                              compiled-op1
+                              (o+ body1
+                                  (annotate 'pk-soup
+                                    (list:list:annotate
+                                      'pk-soup-whitec nil))
+                                  body2)
+                              staticenv2)))
+                   (annotate 'pk-compile-fork
+                     (obj get   (memo:fn ()
+                                  (annotate 'pk-lambdacalc-call
+                                    call.compile-call))
+                          meta  (memo:fn ()
+                                  (annotate 'pk-lambdacalc-call-meta
+                                    call.compile-call))
+                          op    (fn (compiled-op3 body3 staticenv3)
                                   (pk-call call.compile-op
                                            compiled-op3
                                            body3
@@ -1057,12 +1050,12 @@
                             "without the quotes."))))
 
 (pk-dynenv-set-meta pk-replenv* 'assign
-  (pk-meta compile-fork  (list:pk-compile-fork-from-op
-                           pk-assign-compiler)))
+  (pk-meta compile-fork (list:pk-compile-fork-from-op
+                          pk-assign-compiler)))
 
 (pk-dynenv-set-meta pk-replenv* 'assign-meta
-  (pk-meta compile-fork  (list:pk-compile-fork-from-op
-                           pk-assignmeta-compiler)))
+  (pk-meta compile-fork (list:pk-compile-fork-from-op
+                          pk-assignmeta-compiler)))
 
 (pk-dynenv-set-meta pk-replenv* ':
   (pk-meta result        (fn args1
