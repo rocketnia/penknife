@@ -83,6 +83,8 @@
 ; plt  ; taken out of Lathe's imp/sniff.arc
 ; jvm  ; taken out of Lathe's imp/jvm.arc
 ;
+; (thunk . body)  ; macro
+;
 ; (fn-input-ify self)  ; rulebook
 ;
 ; (newline-normalizer str)
@@ -106,7 +108,11 @@
 ; (soup->string soup)
 ; (sip->string self)   ; rulebook
 ;
-; (pk-compile-literal-from-thunk thunk staticenv)
+; (pk-compile-leaf-from-thunk staticenv getter)
+; (pk-compile-literal-from-thunk compile-value staticenv)
+; (pk-compile-call-from-thunk compile-op-and-body op-compiler)
+; (pk-compile-fork-from-op op-compiler)
+;
 ; (pk-function-call-compiler compiled-op body staticenv)
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; (pk-compose-compiler compiled-op body staticenv)
@@ -123,7 +129,6 @@
 ; (pk-binding-set self new-value)       ; rulebook
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
-; (pk-compile-fork-from-op op-compiler)
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
 ; (pk-dynenv-get-binding self varname)          ; rulebook
@@ -329,6 +334,10 @@
 (= plt sn.plt jvm jv.jvm)
 
 
+(mac thunk body
+  `(fn () ,@body))
+
+
 (rc:ontype fn-input-ify () fn-input fn-input
   self)
 
@@ -370,8 +379,8 @@
 (def newline-normalizer (str)
   (zap fn-input-ify str)
   (withs (just-returned nil
-          read (fn () (ut:ret char rep.str!read
-                        (= just-returned (is char #\return))))
+          read (thunk:ut:ret char rep.str!read
+                 (= just-returned (is char #\return)))
           peek (fn (blocking)
                  ; This returns a singleton list containing the next
                  ; character in the stream, ignoring any #\newline
@@ -598,26 +607,40 @@
   (+ "[" (soup->string rep.self) "]"))
 
 
-(def pk-compile-literal-from-thunk (thunk staticenv)
-  (let getter (memo:fn ()
-                (annotate 'pk-lambdacalc-literal call.thunk))
+(def pk-compile-leaf-from-thunk (staticenv getter)
+  (zap memo getter)
+  (annotate 'pk-compile-fork
+    (obj get   getter
+         meta  getter
+         op    pk-staticenv-default-op-compiler.staticenv)))
+
+(def pk-compile-literal-from-thunk (compile-value staticenv)
+  (pk-compile-leaf-from-thunk staticenv
+    (thunk:annotate 'pk-lambdacalc-literal call.compile-value)))
+
+(def pk-compile-call-from-thunk (compile-op-and-body op-compiler)
+  (zap memo compile-op-and-body)
+  (annotate 'pk-compile-fork
+    (obj get   (memo:thunk:annotate 'pk-lambdacalc-call
+                 call.compile-op-and-body)
+         meta  (memo:thunk:annotate 'pk-lambdacalc-call-meta
+                 call.compile-op-and-body)
+         op    op-compiler)))
+
+(def pk-compile-fork-from-op (op-compiler)
+  (fn (varname)
     (annotate 'pk-compile-fork
-      (obj get   getter
-           meta  getter
-           op    pk-staticenv-default-op-compiler.staticenv))))
+      (obj get   (thunk:annotate 'pk-lambdacalc-var varname)
+           meta  (thunk:annotate 'pk-lambdacalc-var-meta varname)
+           op    op-compiler))))
+
 
 (def pk-function-call-compiler (compiled-op body staticenv)
-  (let compile-op-and-body (memo:fn ()
-                             (cons (pk-call rep.compiled-op!get)
-                               (map [pk-call:!get:rep:pk-soup-compile
-                                      _ staticenv]
-                                    otokens.body)))
-    (annotate 'pk-compile-fork
-      (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
-                               call.compile-op-and-body))
-           meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
-                               call.compile-op-and-body))
-           op    pk-staticenv-default-op-compiler.staticenv))))
+  (pk-compile-call-from-thunk
+    (thunk:cons (pk-call rep.compiled-op!get)
+      (map [pk-call:!get:rep:pk-soup-compile _ staticenv]
+           otokens.body))
+    pk-staticenv-default-op-compiler.staticenv))
 
 (def pk-stringquote-compiler (compiled-op body staticenv)
   (pk-compile-literal-from-thunk (fn () soup->string.body) staticenv))
@@ -633,34 +656,25 @@
 ;
 (def pk-compose-compiler (compiled-op body staticenv)
   (withs (token-args           otokens.body
-          compile-first-arg    (memo:fn ()
-                                 (if token-args
-                                   (pk-soup-compile car.token-args
-                                                    staticenv)
-                                   (pk-compile-literal-from-thunk
-                                     (fn () idfn) staticenv)))
-          compile-op-and-body  (memo:fn ()
-                                 (map pk-call:!get:rep
-                                   (cons compiled-op
-                                     (when token-args
-                                       (cons call.compile-first-arg
-                                         (map [pk-soup-compile
-                                                _ staticenv]
-                                           cdr.token-args)))))))
-    (annotate 'pk-compile-fork
-      (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
-                               call.compile-op-and-body))
-           meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
-                               call.compile-op-and-body))
-           op    (fn (compiled-op2 body2 staticenv2)
-                   (let compiled-composed-op call.compile-first-arg
-                     (pk-call rep.compiled-composed-op!op
-                       compiled-composed-op
-                       (case cdr.token-args nil body2
-                         (annotate 'pk-soup
-                           (list:list:annotate 'pk-sip-compose
-                             (list cdr.token-args body2))))
-                       staticenv2)))))))
+          compile-first-arg    (memo:thunk:if token-args
+                                 (pk-soup-compile
+                                   car.token-args staticenv)
+                                 (pk-compile-literal-from-thunk
+                                   thunk.idfn staticenv)))
+    (pk-compile-call-from-thunk
+      (thunk:map pk-call:!get:rep
+        (cons compiled-op
+          (when token-args
+            (cons call.compile-first-arg
+              (map [pk-soup-compile _ staticenv] cdr.token-args)))))
+      (fn (compiled-op2 body2 staticenv2)
+        (let compiled-composed-op call.compile-first-arg
+          (pk-call rep.compiled-composed-op!op
+            compiled-composed-op
+            (case cdr.token-args nil body2
+              (annotate 'pk-soup (list:list:annotate 'pk-sip-compose
+                                   (list cdr.token-args body2))))
+            staticenv2))))))
 
 (def pk-assign-compiler (compiled-op body staticenv)
   (let token-args otokens.body
@@ -670,14 +684,10 @@
       (unless pk-soup-identifier.var
         (err "A name in an assignment form wasn't an identifier."))
       (zap sym:car:rep var)
-      (let getter (memo:fn ()
-                    (annotate 'pk-lambdacalc-set
-                      (list var (pk-call:!get:rep:pk-soup-compile
-                                  val-token staticenv))))
-        (annotate 'pk-compile-fork
-          (obj get   getter
-               meta  getter
-               op    pk-staticenv-default-op-compiler.staticenv))))))
+      (pk-compile-leaf-from-thunk staticenv
+        (memo:thunk:annotate 'pk-lambdacalc-set
+          (list var (pk-call:!get:rep:pk-soup-compile
+                      val-token staticenv)))))))
 
 (def pk-assignmeta-compiler (compiled-op body staticenv)
   (let token-args otokens.body
@@ -687,14 +697,10 @@
       (unless pk-soup-identifier.var
         (err "A name in an assignment form wasn't an identifier."))
       (zap sym:car:rep var)
-      (let getter (memo:fn ()
-                    (annotate 'pk-lambdacalc-set-meta
-                      (list var (pk-call:!meta:rep:pk-soup-compile
-                                  val-token staticenv))))
-        (annotate 'pk-compile-fork
-          (obj get   getter
-               meta  getter
-               op    pk-staticenv-default-op-compiler.staticenv))))))
+      (pk-compile-leaf-from-thunk staticenv
+        (memo:thunk:annotate 'pk-lambdacalc-set-meta
+          (list var (pk-call:!meta:rep:pk-soup-compile
+                      val-token staticenv)))))))
 
 (def pk-infix-call-compiler (compiled-op body staticenv)
   (let token-args otokens.body
@@ -704,46 +710,25 @@
 
 (def pk-generic-infix-compiler (base-compiler)
   (fn (compiled-op1 body1 staticenv1)
-    (let compile-call  (memo:fn ()
-                         (map pk-call:!get:rep
-                           (cons compiled-op1
-                             (map [pk-soup-compile _ staticenv1]
-                               otokens.body1))))
-      (annotate 'pk-compile-fork
-        (obj get   (memo:fn () (annotate 'pk-lambdacalc-call
-                                 call.compile-call))
-             meta  (memo:fn () (annotate 'pk-lambdacalc-call-meta
-                                 call.compile-call))
-             op
-               (fn (compiled-op2 body2 staticenv2)
-                 (with (compile-call  (memo:fn ()
-                                        (map pk-call:!get:rep
-                                          (cons compiled-op2
-                                            (map [pk-soup-compile
-                                                   _ staticenv2]
-                                              otokens.body2))))
-                        compile-op
-                          (memo:fn ()
-                            (!op:rep:do.base-compiler
-                              compiled-op1
-                              (o+ body1
-                                  (annotate 'pk-soup
-                                    (list:list:annotate
-                                      'pk-soup-whitec nil))
-                                  body2)
-                              staticenv2)))
-                   (annotate 'pk-compile-fork
-                     (obj get   (memo:fn ()
-                                  (annotate 'pk-lambdacalc-call
-                                    call.compile-call))
-                          meta  (memo:fn ()
-                                  (annotate 'pk-lambdacalc-call-meta
-                                    call.compile-call))
-                          op    (fn (compiled-op3 body3 staticenv3)
-                                  (pk-call call.compile-op
-                                           compiled-op3
-                                           body3
-                                           staticenv3)))))))))))
+    (pk-compile-call-from-thunk
+      (thunk:map pk-call:!get:rep
+        (cons compiled-op1
+          (map [pk-soup-compile _ staticenv1] otokens.body1)))
+      (fn (compiled-op2 body2 staticenv2)
+        (let compile-op
+               (memo:thunk:!op:rep:do.base-compiler
+                 compiled-op1
+                 (let s (annotate 'pk-soup
+                          (list:list:annotate 'pk-soup-whitec nil))
+                   (o+ body1 s body2))
+                 staticenv2)
+          (pk-compile-call-from-thunk
+            (thunk:map pk-call:!get:rep
+              (cons compiled-op2
+                (map [pk-soup-compile _ staticenv2] otokens.body2)))
+            (fn (compiled-op3 body3 staticenv3)
+              (pk-call call.compile-op
+                compiled-op3 body3 staticenv3))))))))
 
 
 (mac pk-meta args
@@ -774,13 +759,6 @@
 ; TODO: Consider making 'pk-lambdacalc-var-binding,
 ; 'pk-lambdacalc-set-binding, and 'pk-lambdacalc-unset-binding
 ; expression types.
-
-(def pk-compile-fork-from-op (op-compiler)
-  (fn (varname)
-    (annotate 'pk-compile-fork
-      (obj get   (fn () (annotate 'pk-lambdacalc-var varname))
-           meta  (fn () (annotate 'pk-lambdacalc-var-meta varname))
-           op    op-compiler))))
 
 (rc:ontype pk-staticenv-get-compile-fork (varname)
              pk-ad-hoc-env pk-ad-hoc-env
@@ -868,8 +846,7 @@
   (unless (and single.soup (isa car.soup 'string)
             (all digit car.soup))
     (do.fail "The word wasn't a nonnegative decimal integer."))
-  (pk-compile-literal-from-thunk
-    (fn () (coerce car.soup 'int)) staticenv))
+  (pk-compile-literal-from-thunk (thunk:int car.soup) staticenv))
 
 (mr:rule pk-soup-compile (soup staticenv) infix
   (iflet (left op right) (o-split-last-token soup
@@ -1024,7 +1001,7 @@
 ;
 (= pk-replenv* (annotate 'pk-ad-hoc-env (table)))
 
-(pk-dynenv-set pk-replenv* 'demo (fn () (prn "This is a demo.")))
+(pk-dynenv-set pk-replenv* 'demo (thunk:prn "This is a demo."))
 
 (pk-dynenv-set pk-replenv* '+ +)
 
