@@ -778,12 +778,14 @@
 (rc:ontype pk-dynenv-get (varname) pk-ad-hoc-env pk-ad-hoc-env
   (iflet (binding) (pk-dynenv-get-binding self varname)
     pk-binding-get.binding
-    (err:+ "The variable \"" varname "\" is dynamically unbound.")))
+    (err:+ "The variable \"" (or varname "nil") "\" is dynamically "
+           "unbound.")))
 
 (rc:ontype pk-dynenv-get-meta (varname) pk-ad-hoc-env pk-ad-hoc-env
   (iflet (binding) (pk-dynenv-get-binding self varname)
     pk-binding-get-meta.binding
-    (err:+ "The variable \"" varname "\" is dynamically unbound.")))
+    (err:+ "The variable \"" (or varname "nil") "\" is dynamically "
+           "unbound.")))
 
 (rc:ontype pk-dynenv-set-binding (varname binding)
              pk-ad-hoc-env pk-ad-hoc-env
