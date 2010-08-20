@@ -158,6 +158,8 @@
 ;
 ; (pk-compose . args)
 ; pk-replenv*                       ; value of type 'pk-ad-hoc-env
+;
+; (error-message error)
 ; (pkrepl (o str (errsafe:stdin)))
 ;
 ;
@@ -372,24 +374,43 @@
     ; used as a Reader--either the reader we create, or the original
     ; value of 'self.
     (errsafe:zap jvm!java-io-InputStreamReader-new self)
-    ; TODO: See if PushbackReader would be better.
-    (zap jvm!java-io-BufferedReader-new self))
+    ; TODO: See if BufferedReader would be better.
+    (zap jvm!java-io-PushbackReader-new self))
   (annotate 'fn-input
-    (fn ((o mode 'read))
-      (case mode
-        ready  (~~if plt  plt.char-ready?.self
-                     jvm  jvm!ready.self)
-        peek   (if jvm
-                 (do (jvm!mark self 2)  ; TODO: See if this can be 1.
-                     (do1 (caselet charcode jvm!read.self -1 nil
-                            (coerce charcode 'char))
-                          jvm!reset.self))
-                 peekc.self)
-        read   (if jvm
-                 (caselet charcode jvm!read.self -1 nil
+    ; This is critical enough that we're special-casing each Java
+    ; implementation rather than using the interpreted 'jvm DSL
+    ; multiple times per character read.
+    (if sn.jarcdrop*
+      (with (jready   (jarc.JavaInstanceMethod.find self "ready" nil)
+             jread    (jarc.JavaInstanceMethod.find self "read" nil)
+             ; This #\a is just a sample character.
+             junread  (jarc.JavaInstanceMethod.find
+                        self "unread" '(#\a)))
+        (fn ((o mode 'read))
+          (case mode
+            ready  do.jready.self
+            peek   (caselet charcode do.jread.self -1 nil
+                     (do (do.junread self charcode)
+                         (coerce charcode 'char)))
+            read   (caselet charcode do.jread.self -1 nil
+                     (coerce charcode 'char))
+                   (err "Illegal fn-input option."))))
+        sn.rainbowdrop*
+      (fn ((o mode 'read))
+        (case mode
+          ready  (java-invoke self 'ready nil)
+          peek   (caselet charcode (java-invoke self 'read nil) -1 nil
+                   (do (java-invoke self 'unread list.charcode)
+                       (coerce charcode 'char)))
+          read   (caselet charcode (java-invoke self 'read nil) -1 nil
                    (coerce charcode 'char))
-                 readc.self)
-               (err "Illegal fn-input option.")))))
+                 (err "Illegal fn-input option.")))
+      (fn ((o mode 'read))
+        (case mode
+          ready  (~~and plt plt.char-ready?.self)
+          peek   peekc.self
+          read   readc.self
+                 (err "Illegal fn-input option."))))))
 
 
 ; This translates "\r\n" and "\r" sequences to "\n".
@@ -1050,6 +1071,16 @@
                            pk-infix-call-compiler)))
 
 
+; NOTE: In official Arc 3.1 and Anarki, the type of an exception is
+; 'exception, but in Rainbow it's 'exn, and in Jarc 17 there is no Arc
+; type; it's just a Java object.
+(def error-message (error)
+  (if (in type.error 'exception 'exn)
+    details.error
+      (jv.ajava error 'jarc.JarcError)
+    jvm!getMessage.error
+    (err "The argument to 'error-message wasn't an error.")))
+
 ; NOTE: On Rainbow, (stdin), of all things, produces an error. When
 ; that happens, we go get it ourselves.
 (def pkrepl ((o str (errsafe:stdin)))
@@ -1058,8 +1089,8 @@
   (zap newline-normalizer:fn-input-ify str)
   ; NOTE: Jarc's 'on-err suppresses escape continuations, so
   ; 'catch:while:on-err and 'throw would fail here.
-  (car:catch:until:only.throw:on-err [do (prn "Error: " details._)
-                                         nil]
+  (car:catch:until:only.throw:on-err [do1 nil (prn "Error: "
+                                                error-message._)]
     (fn ()
       ; Show the prompt unless there's a non-whitespace character
       ; ready.
