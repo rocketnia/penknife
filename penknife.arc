@@ -129,15 +129,14 @@
 ; (pk-binding-set self new-value)       ; rulebook
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
-; (pk-staticenv-get-compile-fork self varname)  ; rulebook
-; (pk-staticenv-default-op-compiler self)       ; rulebook
-; (pk-dynenv-get-binding self varname)          ; rulebook
-; (pk-dynenv-get self varname)                  ; rulebook
-; (pk-dynenv-get-meta self varname)             ; rulebook
-; (pk-dynenv-set-binding self varname)          ; rulebook
-; (pk-dynenv-unset-binding self varname)        ; rulebook
-; (pk-dynenv-set self varname)                  ; rulebook
-; (pk-dynenv-set-meta self varname)             ; rulebook
+; (pk-staticenv-get-compile-fork self varname)       ; rulebook
+; (pk-staticenv-default-op-compiler self)            ; rulebook
+; (pk-dynenv-ensure-binding self varname (o value))  ; rulebook
+; (pk-dynenv-get-binding self varname)               ; rulebook
+; (pk-dynenv-get self varname)                       ; rulebook
+; (pk-dynenv-get-meta self varname)                  ; rulebook
+; (pk-dynenv-set self varname)                       ; rulebook
+; (pk-dynenv-set-meta self varname)                  ; rulebook
 ;
 ; (pk-alpha-id-char x)
 ; (pk-infix-id-char x)
@@ -779,10 +778,6 @@
   (= rep.self.0 new-value))
 
 
-; TODO: Consider making 'pk-lambdacalc-var-binding,
-; 'pk-lambdacalc-set-binding, and 'pk-lambdacalc-unset-binding
-; expression types.
-
 (rc:ontype pk-staticenv-get-compile-fork (varname)
              pk-ad-hoc-env pk-ad-hoc-env
   (aif (aand (pk-dynenv-get-binding self varname)
@@ -794,6 +789,11 @@
 (rc:ontype pk-staticenv-default-op-compiler ()
              pk-ad-hoc-env pk-ad-hoc-env
   pk-function-call-compiler)
+
+; TODO: Figure out how best to make this thread-safe.
+(rc:ontype pk-dynenv-ensure-binding (varname (o value))
+             pk-ad-hoc-env pk-ad-hoc-env
+  (car:or= rep.self.varname (list pk-make-ad-hoc-binding.value)))
 
 (rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
   rep.self.varname)
@@ -810,30 +810,14 @@
     (err:+ "The variable \"" (or varname "nil") "\" is dynamically "
            "unbound.")))
 
-(rc:ontype pk-dynenv-set-binding (varname binding)
-             pk-ad-hoc-env pk-ad-hoc-env
-  (= rep.self.varname list.binding)
-  binding)
-
-(rc:ontype pk-dynenv-unset-binding (varname binding)
-             pk-ad-hoc-env pk-ad-hoc-env
-  (wipe rep.self.varname))
-
 (rc:ontype pk-dynenv-set (varname new-value)
              pk-ad-hoc-env pk-ad-hoc-env
-  (iflet (binding) (pk-dynenv-get-binding self varname)
-    (pk-binding-set binding new-value)
-    (do (pk-dynenv-set-binding
-          self varname pk-make-ad-hoc-binding.new-value)
-        new-value)))
+  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
 
 (rc:ontype pk-dynenv-set-meta (varname new-value)
              pk-ad-hoc-env pk-ad-hoc-env
-  (iflet (binding) (pk-dynenv-get-binding self varname)
-    (pk-binding-set-meta binding new-value)
-    (do (pk-dynenv-set-binding
-          self varname pk-make-ad-hoc-binding-meta.new-value)
-        new-value)))
+  (pk-binding-set-meta
+    (pk-dynenv-ensure-binding self varname) new-value))
 
 
 ; For efficiency, this assumes the argument is a character.
@@ -1002,9 +986,6 @@
 
 (rc:ontype pk-eval-tl (env) pk-soup pk-soup
   (pk-eval-meta (pk-soup-compile-tl self env) env))
-
-; TODO: Implement 'pk-eval-meta and 'pk-eval for other kinds of
-; Penknife "lambdacalc" syntax, namely lambdas.
 
 
 (def pk-compose args

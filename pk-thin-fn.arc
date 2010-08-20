@@ -118,34 +118,30 @@
 (def-pk-optimize-expr pk-lambdacalc-var
   (if (mem self lex)
     `((rep ,pk-mangle.self) 'result)
-    (iflet (binding) (pk-dynenv-get-binding dynenv self)
-      `(pk-binding-get (',thunk.binding))
-      `(pk-dynenv-get ',dynenv ',self))))
+    (let binding (pk-dynenv-ensure-binding dynenv self)
+      `(pk-binding-get (',thunk.binding)))))
 
 (def-pk-optimize-expr-meta pk-lambdacalc-var-meta
   (if (mem self lex)
     pk-mangle.self
-    (iflet (binding) (pk-dynenv-get-binding dynenv self)
-      `(pk-binding-get-meta (',thunk.binding))
-      `(pk-dynenv-get-meta ',dynenv ',self))))
+    (let binding (pk-dynenv-ensure-binding dynenv self)
+      `(pk-binding-get-meta (',thunk.binding)))))
 
 (def-pk-optimize-expr pk-lambdacalc-set
   (withs ((var val-expr)  self
           val             (pk-optimize-expr val-expr dynenv lex))
     (if (mem var lex)
       `(assign ,pk-mangle.var (pk-meta result ,val))
-      (iflet (binding) (pk-dynenv-get-binding dynenv var)
-        `(pk-binding-set (',thunk.binding) ,val)
-        `(pk-dynenv-set ',dynenv ',var ,val)))))
+      (let binding (pk-dynenv-ensure-binding dynenv var)
+        `(pk-binding-set (',thunk.binding) ,val)))))
 
 (def-pk-optimize-expr-meta pk-lambdacalc-set-meta
   (withs ((var val-expr)  self
           val             (pk-optimize-expr-meta val-expr dynenv lex))
     (if (mem var lex)
       `(assign ,pk-mangle.var ,val)
-      (iflet (binding) (pk-dynenv-get-binding dynenv var)
-        `(pk-binding-set-meta (',thunk.binding) ,val)
-        `(pk-dynenv-set-meta ',dynenv ',var ,val)))))
+      (let binding (pk-dynenv-ensure-binding dynenv var)
+        `(pk-binding-set-meta (',thunk.binding) ,val)))))
 
 (def-pk-optimize-expr pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
@@ -165,18 +161,16 @@
 (def-pk-eval pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
           arg-set           (dedup:join args rest))
-    (eval `(let env ',dynenv
-             (fn ,(ut.join-end (map pk-mangle args)
-                               (when rest (pk-mangle car.rest)))
-               ,@(when rest
-                   (let var (pk-mangle car.rest)
-                     `((assign ,var (annotate 'pk-linklist
-                                      (copylist ,var))))))
-               ,@(map [let _ pk-mangle._
-                        `(assign ,_ (pk-meta result ,_))]
-                      arg-set)
-               ,@(map [pk-optimize-expr _ dynenv arg-set]
-                      body))))))
+    (eval `(fn ,(ut.join-end (map pk-mangle args)
+                             (when rest (pk-mangle car.rest)))
+             ,@(when rest
+                 (let var (pk-mangle car.rest)
+                   `((assign ,var (annotate 'pk-linklist
+                                    (copylist ,var))))))
+             ,@(map [let _ pk-mangle._
+                      `(assign ,_ (pk-meta result ,_))]
+                    arg-set)
+             ,@(map [pk-optimize-expr _ dynenv arg-set] body)))))
 
 
 (def pk-thin-fn-rest-compiler (compiled-op body staticenv)
