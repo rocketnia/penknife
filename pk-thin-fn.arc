@@ -147,13 +147,8 @@
        ,@(map [pk-optimize-expr _ dynenv innerlex] body))))
 
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
-  (pk-meta result (pk-eval self dynenv)))
-
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
-  (withs ((args rest body)  rep.self
+(def-pk-eval pk-lambdacalc-thin-fn
+  (withs ((args rest body)  self
           arg-set           (dedup:join args rest))
     (eval `(let env ',dynenv
              (fn ,(ut.join-end (map pk-mangle args)

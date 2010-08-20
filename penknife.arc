@@ -151,9 +151,11 @@
 ; (pk-call-set self . args)   ; rulebook
 ; (pk-call-meta self . args)  ; rulebook
 ;
-; (pk-eval-meta self dynenv)  ; rulebook
-; (pk-eval self dynenv)       ; rulebook
-; (pk-eval-tl self dynenv)    ; rulebook
+; (def-pk-eval type . body)       ; macro
+; (def-pk-eval-meta type . body)  ; macro
+; (pk-eval self dynenv)           ; rulebook
+; (pk-eval-meta self dynenv)      ; rulebook
+; (pk-eval-tl self dynenv)        ; rulebook
 ;
 ; (pk-compose . args)
 ; pk-replenv*                       ; value of type 'pk-ad-hoc-env
@@ -946,76 +948,57 @@
   'pk-call-meta 'default)
 
 
-(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-call pk-lambdacalc-call
-  (pk-meta result (pk-eval self dynenv)))
+(mac def-pk-eval (type . body)
+  (w/uniq g-backing-fn
+    `(let ,g-backing-fn (fn (self dynenv) ,@body)
+       (,rc!ontype pk-eval-meta (dynenv) ,type ,type
+         (pk-meta result (,g-backing-fn rep.self dynenv)))
+       (,rc!ontype pk-eval (dynenv) ,type ,type
+         (,g-backing-fn rep.self dynenv)))))
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-call-set pk-lambdacalc-call-set
-  (pk-meta result (pk-eval self dynenv)))
+(mac def-pk-eval-meta (type . body)
+  (w/uniq g-backing-fn
+    `(let ,g-backing-fn (fn (self dynenv) ,@body)
+       (,rc!ontype pk-eval-meta (dynenv) ,type ,type
+         (,g-backing-fn rep.self dynenv))
+       (,rc!ontype pk-eval (dynenv) ,type ,type
+         ((rep (,g-backing-fn rep.self dynenv)) 'result)))))
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
-  (apply pk-call-meta (map [pk-eval _ dynenv] rep.self)))
+(def-pk-eval pk-lambdacalc-call
+  (apply pk-call (map [pk-eval _ dynenv] self)))
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-literal pk-lambdacalc-literal
-  (pk-meta result (pk-eval self dynenv)))
+(def-pk-eval pk-lambdacalc-call-set
+  (apply pk-call-set (map [pk-eval _ dynenv] self)))
 
-(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-var pk-lambdacalc-var
-  (pk-meta result (pk-eval self dynenv)))
+(def-pk-eval-meta pk-lambdacalc-call-meta
+  (apply pk-call-meta (map [pk-eval _ dynenv] self)))
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
-  (pk-dynenv-get-meta dynenv rep.self))
+(def-pk-eval pk-lambdacalc-literal
+  self)
 
-(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-set pk-lambdacalc-set
-  (pk-meta result (pk-eval self dynenv)))
+(def-pk-eval pk-lambdacalc-var
+  (pk-dynenv-get dynenv self))
 
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
-  (pk-dynenv-set-meta
-    dynenv rep.self.0 (pk-eval-meta rep.self.1 dynenv)))
+(def-pk-eval-meta pk-lambdacalc-var-meta
+  (pk-dynenv-get-meta dynenv self))
 
-(rc:ontype pk-eval-meta (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval-meta (pk-call rep.self!meta) dynenv))
+(def-pk-eval pk-lambdacalc-set
+  (pk-dynenv-set dynenv self.0 (pk-eval self.1 dynenv)))
 
-(rc:ontype pk-eval-meta (env) pk-soup pk-soup
-  (pk-eval-meta (pk-soup-compile self env) env))
-
-(rc:ontype pk-eval (dynenv) pk-lambdacalc-call pk-lambdacalc-call
-  (apply pk-call (map [pk-eval _ dynenv] rep.self)))
-
-(rc:ontype pk-eval (dynenv)
-                     pk-lambdacalc-call-set pk-lambdacalc-call-set
-  (apply pk-call-set (map [pk-eval _ dynenv] rep.self)))
-
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
-  (!result:rep:pk-eval-meta self dynenv))
-
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-literal pk-lambdacalc-literal
-  rep.self)
-
-(rc:ontype pk-eval (dynenv) pk-lambdacalc-var pk-lambdacalc-var
-  (pk-dynenv-get dynenv rep.self))
-
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
-  (!result:rep:pk-eval-meta self dynenv))
-
-(rc:ontype pk-eval (dynenv) pk-lambdacalc-set pk-lambdacalc-set
-  (pk-dynenv-set dynenv rep.self.0 (pk-eval rep.self.1 dynenv)))
-
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
-  (!result:rep:pk-eval-meta self dynenv))
+(def-pk-eval-meta pk-lambdacalc-set-meta
+  (pk-dynenv-set-meta dynenv self.0 (pk-eval-meta self.1 dynenv)))
 
 (rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
   (pk-eval (pk-call rep.self!get) dynenv))
 
 (rc:ontype pk-eval (env) pk-soup pk-soup
   (pk-eval (pk-soup-compile self env) env))
+
+(rc:ontype pk-eval-meta (dynenv) pk-compile-fork pk-compile-fork
+  (pk-eval-meta (pk-call rep.self!meta) dynenv))
+
+(rc:ontype pk-eval-meta (env) pk-soup pk-soup
+  (pk-eval-meta (pk-soup-compile self env) env))
 
 (rc:ontype pk-eval-tl (env) pk-soup pk-soup
   (pk-eval-meta (pk-soup-compile-tl self env) env))
