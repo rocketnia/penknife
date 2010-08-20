@@ -49,7 +49,10 @@
 ;
 ; (pk-mangle name)
 ;
-; (pk-optimize-expr self dynenv lex)  ; rulebook
+; (def-pk-optimize-expr type . body)
+; (def-pk-optimize-expr-meta type . body)
+; (pk-optimize-expr self dynenv lex)       ; rulebook
+; (pk-optimize-expr-meta self dynenv lex)  ; rulebook
 ;
 ; (pk-thin-fn-rest-compiler compiled-op body staticenv)
 ; (pk-thin-fn-compiler compiled-op body staticenv)
@@ -77,63 +80,75 @@
   (sym:+ "pk_" (or name "nil")))
 
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-call pk-lambdacalc-call
-  `(pk-call ,@(map [pk-optimize-expr _ dynenv lex] rep.self)))
+(mac def-pk-optimize-expr (type . body)
+  (w/uniq g-backing-fn
+    `(let ,g-backing-fn (fn (self dynenv lex) ,@body)
+       (,rc!ontype pk-optimize-expr (dynenv lex) ,type ,type
+         (,g-backing-fn rep.self dynenv lex))
+       (,rc!ontype pk-optimize-expr-meta (dynenv lex) ,type ,type
+         `(pk-meta result ,(,g-backing-fn rep.self dynenv lex))))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-call-set pk-lambdacalc-call-set
-  `(pk-call-set ,@(map [pk-optimize-expr _ dynenv lex] rep.self)))
+(mac def-pk-optimize-expr-meta (type . body)
+  (w/uniq g-backing-fn
+    `(let ,g-backing-fn (fn (self dynenv lex) ,@body)
+       (,rc!ontype pk-optimize-expr (dynenv lex) ,type ,type
+         `((rep ,(,g-backing-fn rep.self dynenv lex)) 'result))
+       (,rc!ontype pk-optimize-expr-meta (dynenv lex) ,type ,type
+         (,g-backing-fn rep.self dynenv lex)))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
-  `(pk-call-meta ,@(map [pk-optimize-expr _ dynenv lex] rep.self)))
+(def-pk-optimize-expr pk-lambdacalc-call
+  `(pk-call ,@(map [pk-optimize-expr _ dynenv lex] self)))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-literal pk-lambdacalc-literal
-  `',rep.self)
+(def-pk-optimize-expr pk-lambdacalc-call-set
+  `(pk-call-set ,@(map [pk-optimize-expr _ dynenv lex] self)))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-var pk-lambdacalc-var
-  (zap rep self)
+(def-pk-optimize-expr-meta pk-lambdacalc-call-meta
+  `(pk-call-meta ,@(map [pk-optimize-expr _ dynenv lex] self)))
+
+(def-pk-optimize-expr pk-lambdacalc-literal
+  `',self)
+
+; NOTE: In the following rules, we wrap the bindings we get in thunks
+; so that their identities are preserved in official Arc 3.1 and
+; Anarki. If we just included the binding directly in the quote, using
+; "',binding", then (assuming the binding is an Arc tagged value,
+; which is a Racket vector) Racket would evaluate the quoted vector by
+; copying it.
+
+(def-pk-optimize-expr pk-lambdacalc-var
   (if (mem self lex)
     `((rep ,pk-mangle.self) 'result)
-    (aif (pk-dynenv-get-binding dynenv self)
-      `(pk-binding-get ',car.it)
+    (iflet (binding) (pk-dynenv-get-binding dynenv self)
+      `(pk-binding-get (',thunk.binding))
       `(pk-dynenv-get ',dynenv ',self))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
-  (zap rep self)
+(def-pk-optimize-expr-meta pk-lambdacalc-var-meta
   (if (mem self lex)
     pk-mangle.self
-    (aif (pk-dynenv-get-binding dynenv self)
-      `(pk-binding-get-meta ',car.it)
+    (iflet (binding) (pk-dynenv-get-binding dynenv self)
+      `(pk-binding-get-meta (',thunk.binding))
       `(pk-dynenv-get-meta ',dynenv ',self))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-set pk-lambdacalc-set
-  (withs ((var val-expr)  rep.self
-          val             (pk-optimize-expr val dynenv lex))
+(def-pk-optimize-expr pk-lambdacalc-set
+  (withs ((var val-expr)  self
+          val             (pk-optimize-expr val-expr dynenv lex))
     (if (mem var lex)
       `(assign ,pk-mangle.var (pk-meta result ,val))
-      (aif (pk-dynenv-get-binding dynenv var)
-        `(pk-binding-set ',car.it ,val)
+      (iflet (binding) (pk-dynenv-get-binding dynenv var)
+        `(pk-binding-set (',thunk.binding) ,val)
         `(pk-dynenv-set ',dynenv ',var ,val)))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
-  (withs ((var val-expr)  rep.self
-          val             (pk-optimize-expr val dynenv lex))
+(def-pk-optimize-expr-meta pk-lambdacalc-set-meta
+  (withs ((var val-expr)  self
+          val             (pk-optimize-expr-meta val-expr dynenv lex))
     (if (mem var lex)
       `(assign ,pk-mangle.var ,val)
-      (aif (pk-dynenv-get-binding dynenv var)
-        `(pk-binding-set-meta ',car.it ,val)
+      (iflet (binding) (pk-dynenv-get-binding dynenv var)
+        `(pk-binding-set-meta (',thunk.binding) ,val)
         `(pk-dynenv-set-meta ',dynenv ',var ,val)))))
 
-(rc:ontype pk-optimize-expr (dynenv lex)
-             pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
-  (withs ((args rest body)  rep.self
+(def-pk-optimize-expr pk-lambdacalc-thin-fn
+  (withs ((args rest body)  self
           arg-set           (dedup:join args rest)
           innerlex          (union is arg-set lex))
     `(fn ,(ut.join-end (map pk-mangle args)
