@@ -57,9 +57,6 @@
 ;
 ; Type listing:
 ;
-; pk-linklist
-;   rep: An Arc proper list.
-;
 ; pk-lambdacalc-thin-fn
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A proper list of symbols representing the non-rest
@@ -83,6 +80,10 @@
 (rc:ontype pk-optimize-expr (dynenv lex)
              pk-lambdacalc-call pk-lambdacalc-call
   `(pk-call ,@(map [pk-optimize-expr _ dynenv lex] rep.self)))
+
+(rc:ontype pk-optimize-expr (dynenv lex)
+             pk-lambdacalc-call-set pk-lambdacalc-call-set
+  `(pk-call-set ,@(map [pk-optimize-expr _ dynenv lex] rep.self)))
 
 (rc:ontype pk-optimize-expr (dynenv lex)
              pk-lambdacalc-call-meta pk-lambdacalc-call-meta

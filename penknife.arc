@@ -147,8 +147,9 @@
 ; (pk-soup-compile soup staticenv)     ; rulebook
 ; (pk-sip-compile self staticenv)      ; rulebook
 ;
-; (pk-call-meta self . args)  ; rulebook
 ; (pk-call self . args)       ; rulebook
+; (pk-call-set self . args)   ; rulebook
+; (pk-call-meta self . args)  ; rulebook
 ;
 ; (pk-eval-meta self dynenv)  ; rulebook
 ; (pk-eval self dynenv)       ; rulebook
@@ -233,6 +234,13 @@
 ;        'pk-lambdacalc-[something] types. The expressions will be
 ;        evaluated from first to last and called with 'pk-call.
 ;
+; pk-lambdacalc-call-set
+;   rep: A cons cell containing the expression for the operator and a
+;        proper list of expressions for the arguments, where each
+;        expression is a value of one of the
+;        'pk-lambdacalc-[something] types. The expressions will be
+;        evaluated from first to last and called with 'pk-call-set.
+;
 ; pk-lambdacalc-call-meta
 ;   rep: A cons cell containing the expression for the operator and a
 ;        proper list of expressions for the arguments, where each
@@ -247,6 +255,11 @@
 ;                'pk-lambdacalc-[something] types, representing an
 ;                expression that returns a value to be used in a
 ;                parent expression.
+;   rep._!set:   A value which, when called using 'pk-call, accepts an
+;                expression and returns another expression that sets
+;                something to the value returned by the first
+;                expression. Each of these expressions is a value of
+;                one of the 'pk-lambdacalc-[something] types.
 ;   rep._!meta:  A value which, when called using 'pk-call, accepts no
 ;                arguments and returns a value of one of the
 ;                'pk-lambdacalc-[something] types, representing an
@@ -320,6 +333,9 @@
 ;                         nil, then a default compile fork should be
 ;                         constructed according to that environment's
 ;                         own behavior.
+;
+; pk-linklist
+;   rep: An Arc proper list.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -611,6 +627,8 @@
   (zap memo getter)
   (annotate 'pk-compile-fork
     (obj get   getter
+         set   [err:+ "An attempt was made to compile an ineligible "
+                      "form for setting."]
          meta  getter
          op    pk-staticenv-default-op-compiler.staticenv)))
 
@@ -623,6 +641,11 @@
   (annotate 'pk-compile-fork
     (obj get   (memo:thunk:annotate 'pk-lambdacalc-call
                  call.compile-op-and-body)
+         set   (let compile-set
+                      (memo:thunk:annotate 'pk-lambdacalc-call-set
+                        call.compile-op-and-body)
+                 [annotate 'pk-lambdacalc-call
+                   (list call.compile-set _)])
          meta  (memo:thunk:annotate 'pk-lambdacalc-call-meta
                  call.compile-op-and-body)
          op    op-compiler)))
@@ -631,6 +654,7 @@
   (fn (varname)
     (annotate 'pk-compile-fork
       (obj get   (thunk:annotate 'pk-lambdacalc-var varname)
+           set   [annotate 'pk-lambdacalc-set (list varname _)]
            meta  (thunk:annotate 'pk-lambdacalc-var-meta varname)
            op    op-compiler))))
 
@@ -680,22 +704,19 @@
   (let token-args otokens.body
     (unless (is len.token-args 2)
       (err "An assignment body didn't have exactly two words in it."))
-    (let (var val-token) token-args
-      (unless pk-soup-identifier.var
-        (err "A name in an assignment form wasn't an identifier."))
-      (zap sym:car:rep var)
-      (pk-compile-leaf-from-thunk staticenv
-        (thunk:annotate 'pk-lambdacalc-set
-          (list var (pk-call:!get:rep:pk-soup-compile
-                      val-token staticenv)))))))
+    (pk-compile-leaf-from-thunk staticenv
+      (thunk:let (var val) token-args
+        (pk-call (!set:rep:pk-soup-compile var staticenv)
+                 (pk-call:!get:rep:pk-soup-compile val staticenv))))))
 
 (def pk-assignmeta-compiler (compiled-op body staticenv)
   (let token-args otokens.body
     (unless (is len.token-args 2)
-      (err "An assignment body didn't have exactly two words in it."))
+      (err:+ "An assign-meta body didn't have exactly two words in "
+             "it."))
     (let (var val-token) token-args
       (unless pk-soup-identifier.var
-        (err "A name in an assignment form wasn't an identifier."))
+        (err "A name in an assign-meta form wasn't an identifier."))
       (zap sym:car:rep var)
       (pk-compile-leaf-from-thunk staticenv
         (thunk:annotate 'pk-lambdacalc-set-meta
@@ -899,6 +920,22 @@
                  "composed."))))
 
 
+(rc:ontype pk-call args fn fn
+  (apply self args))
+
+(rc:ontype pk-call args pk-fn-meta pk-fn-meta
+  (!result:rep:apply rep.self args))
+
+(rc:ontype pk-call args pk-linklist pk-linklist
+  (unless single.args
+    (do.fail "A 'pk-linklist takes one argument."))
+  (rep.self car.args))
+
+(rc:ontype pk-call-set args pk-linklist pk-linklist
+  (unless single.args
+    (do.fail "A 'pk-linklist takes one argument."))
+  [= (rep.self car.args) _])
+
 (rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
   (apply pk-call rep.self args))
 
@@ -908,21 +945,17 @@
 (oc:label-prefer-labels-last pk-call-meta-default-last
   'pk-call-meta 'default)
 
-(rc:ontype pk-call args fn fn
-  (apply self args))
-
-(rc:ontype pk-call args pk-fn-meta pk-fn-meta
-  (!result:rep:apply rep.self args))
-
 
 (rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-call pk-lambdacalc-call
   (pk-meta result (pk-eval self dynenv)))
 
 (rc:ontype pk-eval-meta (dynenv)
+             pk-lambdacalc-call-set pk-lambdacalc-call-set
+  (pk-meta result (pk-eval self dynenv)))
+
+(rc:ontype pk-eval-meta (dynenv)
              pk-lambdacalc-call-meta pk-lambdacalc-call-meta
-  (apply pk-call-meta (accum acc
-                        (each subexpr rep.self
-                          (do.acc:pk-eval subexpr dynenv)))))
+  (apply pk-call-meta (map [pk-eval _ dynenv] rep.self)))
 
 (rc:ontype pk-eval-meta (dynenv)
              pk-lambdacalc-literal pk-lambdacalc-literal
@@ -950,9 +983,11 @@
   (pk-eval-meta (pk-soup-compile self env) env))
 
 (rc:ontype pk-eval (dynenv) pk-lambdacalc-call pk-lambdacalc-call
-  (apply pk-call (accum acc
-                   (each subexpr rep.self
-                     (do.acc:pk-eval subexpr dynenv)))))
+  (apply pk-call (map [pk-eval _ dynenv] rep.self)))
+
+(rc:ontype pk-eval (dynenv)
+                     pk-lambdacalc-call-set pk-lambdacalc-call-set
+  (apply pk-call-set (map [pk-eval _ dynenv] rep.self)))
 
 (rc:ontype pk-eval (dynenv)
              pk-lambdacalc-call-meta pk-lambdacalc-call-meta
@@ -1028,11 +1063,11 @@
                        (prn "To exit Penknife, use \"[drop]\", "
                             "without the quotes."))))
 
-(pk-dynenv-set-meta pk-replenv* 'assign
+(pk-dynenv-set-meta pk-replenv* '=
   (pk-meta compile-fork (list:pk-compile-fork-from-op
                           pk-assign-compiler)))
 
-(pk-dynenv-set-meta pk-replenv* 'assign-meta
+(pk-dynenv-set-meta pk-replenv* 'meta=
   (pk-meta compile-fork (list:pk-compile-fork-from-op
                           pk-assignmeta-compiler)))
 
