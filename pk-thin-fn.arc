@@ -76,8 +76,18 @@
     (apply copy rep.self (mappend [list _ nil] vars))))
 
 
+; Pick an unlikely-to-write name without being too obscure and without
+; accidentally using ssyntax (even custom ssyntax hacked onto Arc,
+; within reason).
 (def pk-mangle (name)
-  (sym:+ "pk_" (or name "nil")))
+  (sym:tostring:w/instring s (string:or name "nil")
+    (pr "pk--")
+    (whilet char readc.s
+      (if (or letter.char digit.char)
+        writec.char
+          (is char #\-)
+        (pr "--")
+        (pr "-u" (coerce int.char 'string 16) "-")))))
 
 
 (mac def-pk-optimize-expr (type . body)
