@@ -129,14 +129,14 @@
 ; (pk-binding-set self new-value)       ; rulebook
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
-; (pk-staticenv-get-compile-fork self varname)       ; rulebook
-; (pk-staticenv-default-op-compiler self)            ; rulebook
-; (pk-dynenv-ensure-binding self varname (o value))  ; rulebook
-; (pk-dynenv-get-binding self varname)               ; rulebook
-; (pk-dynenv-get self varname)                       ; rulebook
-; (pk-dynenv-get-meta self varname)                  ; rulebook
-; (pk-dynenv-set self varname)                       ; rulebook
-; (pk-dynenv-set-meta self varname)                  ; rulebook
+; (pk-staticenv-get-compile-fork self varname)  ; rulebook
+; (pk-staticenv-default-op-compiler self)       ; rulebook
+; (pk-dynenv-ensure-binding self varname)       ; rulebook
+; (pk-dynenv-get-binding self varname)          ; rulebook
+; (pk-dynenv-get self varname)                  ; rulebook
+; (pk-dynenv-get-meta self varname)             ; rulebook
+; (pk-dynenv-set self varname)                  ; rulebook
+; (pk-dynenv-set-meta self varname)             ; rulebook
 ;
 ; (pk-alpha-id-char x)
 ; (pk-infix-id-char x)
@@ -336,6 +336,11 @@
 ;                         nil, then a default compile fork should be
 ;                         constructed according to that environment's
 ;                         own behavior.
+;   rep._!error:          If present, the string to raise as an error
+;                         message whenever the result, but not this
+;                         metadata, is looked up in a binding or
+;                         environment. If instead this is nil, then no
+;                         error is raised.
 ;
 ; pk-linklist
 ;   rep: An Arc proper list.
@@ -777,6 +782,7 @@
 (mac pk-meta args
   `(annotate 'pk-ad-hoc-meta (obj ,@args)))
 
+; TODO: See if this is ever going to be used.
 (def pk-make-ad-hoc-binding (value)
   (pk-make-ad-hoc-binding-meta:pk-meta result value))
 
@@ -784,7 +790,9 @@
   (annotate 'pk-ad-hoc-binding list.value))
 
 (rc:ontype pk-binding-get () pk-ad-hoc-binding pk-ad-hoc-binding
-  (!result:rep pk-binding-get-meta.self))
+  (let meta pk-binding-get-meta.self
+    (only.err rep.meta!error)
+    rep.meta!result))
 
 (rc:ontype pk-binding-get-meta () pk-ad-hoc-binding pk-ad-hoc-binding
   rep.self.0)
@@ -812,24 +820,21 @@
   pk-function-call-compiler)
 
 ; TODO: Figure out how best to make this thread-safe.
-(rc:ontype pk-dynenv-ensure-binding (varname (o value))
+; TODO: See if the name ought to be baked into the metadata this way.
+(rc:ontype pk-dynenv-ensure-binding (varname)
              pk-ad-hoc-env pk-ad-hoc-env
-  (car:or= rep.self.varname (list pk-make-ad-hoc-binding.value)))
+  (car:or= rep.self.varname
+    (list:pk-make-ad-hoc-binding-meta:pk-meta error
+      (+ "The variable \"" (or varname "nil") "\" is unbound."))))
 
 (rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
   rep.self.varname)
 
 (rc:ontype pk-dynenv-get (varname) pk-ad-hoc-env pk-ad-hoc-env
-  (iflet (binding) (pk-dynenv-get-binding self varname)
-    pk-binding-get.binding
-    (err:+ "The variable \"" (or varname "nil") "\" is dynamically "
-           "unbound.")))
+  (pk-binding-get:pk-dynenv-ensure-binding self varname))
 
 (rc:ontype pk-dynenv-get-meta (varname) pk-ad-hoc-env pk-ad-hoc-env
-  (iflet (binding) (pk-dynenv-get-binding self varname)
-    pk-binding-get-meta.binding
-    (err:+ "The variable \"" (or varname "nil") "\" is dynamically "
-           "unbound.")))
+  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
 
 (rc:ontype pk-dynenv-set (varname new-value)
              pk-ad-hoc-env pk-ad-hoc-env
@@ -1101,6 +1106,7 @@
         (pr "pk> "))
       (aif (start-word&finish-bracket-word comment-ignorer.str)
         (let meta (pk-eval-tl it pk-replenv*)
+          (only.err rep.meta!error)
           (awhen rep.meta!action
             (pk-call car.it))
           (unless rep.meta!echoless
