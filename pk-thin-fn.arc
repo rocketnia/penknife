@@ -127,7 +127,9 @@
 
 (def-pk-optimize-expr pk-lambdacalc-var
   (if (mem self lex)
-    `((rep ,pk-mangle.self) 'result)
+    `(let _ (rep ,pk-mangle.self)
+       (aif _!error err.it)
+       _!result)
     (let binding (pk-dynenv-ensure-binding dynenv self)
       `(pk-binding-get (',thunk.binding)))))
 
