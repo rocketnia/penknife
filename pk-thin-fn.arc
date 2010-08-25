@@ -45,14 +45,17 @@
 
 ; Definition listing:
 ;
-; (pk-staticenv-shadow self vars)  ; rulebook
+; (pk-staticenv-shadow-list self vars)  ; rulebook
+; (pk-dynenv-shadow-sobj self binds)    ; rulebook
 ;
 ; (pk-mangle name)
 ;
-; (def-pk-optimize-expr type . body)
-; (def-pk-optimize-expr-meta type . body)
-; (pk-optimize-expr self dynenv lex)       ; rulebook
-; (pk-optimize-expr-meta self dynenv lex)  ; rulebook
+; (pk-captures-env self)  ; rulebook
+;
+; (def-pk-optimize-expr type . body)                     ; macro
+; (def-pk-optimize-expr-meta type . body)                ; macro
+; (pk-optimize-expr self dynenv local-lex env-lex)       ; rulebook
+; (pk-optimize-expr-meta self dynenv local-lex env-lex)  ; rulebook
 ;
 ; (pk-thin-fn-rest-compiler compiled-op body staticenv)
 ; (pk-thin-fn-compiler compiled-op body staticenv)
@@ -71,9 +74,15 @@
 ;             one of the 'pk-lambdacalc-[something] types.
 
 
-(rc:ontype pk-staticenv-shadow (vars) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-staticenv-shadow-list (vars) pk-ad-hoc-env pk-ad-hoc-env
   (annotate 'pk-ad-hoc-env
     (apply copy rep.self (mappend [list _ nil] vars))))
+
+(rc:ontype pk-dynenv-shadow-sobj (binds) pk-ad-hoc-env pk-ad-hoc-env
+  (annotate 'pk-ad-hoc-env
+    (apply copy rep.self
+      (mappend [list _.0 (list:pk-make-ad-hoc-binding-meta _.1.0)]
+               tablist.binds))))
 
 
 ; Pick an unlikely-to-write name without being too obscure and without
@@ -90,30 +99,80 @@
         (pr "-u" (coerce int.char 'string 16) "-")))))
 
 
+(rc:ontype pk-captures-env () pk-lambdacalc-call pk-lambdacalc-call
+  (some pk-captures-env rep.self))
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-call-set pk-lambdacalc-call-set
+  (some pk-captures-env rep.self))
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-call-meta pk-lambdacalc-call-meta
+  (some pk-captures-env rep.self))
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-literal pk-lambdacalc-literal
+  nil)
+
+(rc:ontype pk-captures-env () pk-lambdacalc-var pk-lambdacalc-var
+  nil)
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-var-meta pk-lambdacalc-var-meta
+  nil)
+
+(rc:ontype pk-captures-env () pk-lambdacalc-set pk-lambdacalc-set
+  nil)
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-set-meta pk-lambdacalc-set-meta
+  nil)
+
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
+  nil)
+
+
 (mac def-pk-optimize-expr (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self dynenv lex) ,@body)
-       (,rc!ontype pk-optimize-expr (dynenv lex) ,type ,type
-         (,g-backing-fn rep.self dynenv lex))
-       (,rc!ontype pk-optimize-expr-meta (dynenv lex) ,type ,type
-         `(pk-meta result ,(,g-backing-fn rep.self dynenv lex))))))
+    `(let ,g-backing-fn
+            (fn (self tagged-self dynenv local-lex env-lex fail)
+              ,@body)
+       (,rc!ontype pk-optimize-expr (dynenv local-lex env-lex)
+                     ,type ,type
+         (,g-backing-fn rep.self self dynenv local-lex env-lex fail))
+       (,rc!ontype pk-optimize-expr-meta (dynenv local-lex env-lex)
+                     ,type ,type
+         `(pk-meta result
+            ,(,g-backing-fn
+               rep.self self dynenv local-lex env-lex fail))))))
 
 (mac def-pk-optimize-expr-meta (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self dynenv lex) ,@body)
-       (,rc!ontype pk-optimize-expr (dynenv lex) ,type ,type
-         `((rep ,(,g-backing-fn rep.self dynenv lex)) 'result))
-       (,rc!ontype pk-optimize-expr-meta (dynenv lex) ,type ,type
-         (,g-backing-fn rep.self dynenv lex)))))
+    `(let ,g-backing-fn
+            (fn (self tagged-self dynenv local-lex env-lex fail)
+              ,@body)
+       (,rc!ontype pk-optimize-expr (dynenv local-lex env-lex)
+                     ,type ,type
+         `( (rep ,(,g-backing-fn
+                    rep.self self dynenv local-lex env-lex fail))
+            'result))
+       (,rc!ontype pk-optimize-expr-meta (dynenv local-lex env-lex)
+                     ,type ,type
+         (,g-backing-fn
+           rep.self self dynenv local-lex env-lex fail)))))
 
 (def-pk-optimize-expr pk-lambdacalc-call
-  `(pk-call ,@(map [pk-optimize-expr _ dynenv lex] self)))
+  `(pk-call
+     ,@(map [pk-optimize-expr _ dynenv local-lex env-lex] self)))
 
 (def-pk-optimize-expr pk-lambdacalc-call-set
-  `(pk-call-set ,@(map [pk-optimize-expr _ dynenv lex] self)))
+  `(pk-call-set
+     ,@(map [pk-optimize-expr _ dynenv local-lex env-lex] self)))
 
 (def-pk-optimize-expr-meta pk-lambdacalc-call-meta
-  `(pk-call-meta ,@(map [pk-optimize-expr _ dynenv lex] self)))
+  `(pk-call-meta
+     ,@(map [pk-optimize-expr _ dynenv local-lex env-lex] self)))
 
 (def-pk-optimize-expr pk-lambdacalc-literal
   `',self)
@@ -126,39 +185,52 @@
 ; copying it.
 
 (def-pk-optimize-expr pk-lambdacalc-var
-  (if (mem self lex)
+  (if (mem self local-lex)
     `(let _ (rep ,pk-mangle.self)
        (aif _!error err.it)
        _!result)
+      (mem self env-lex)
+    `(pk-dynenv-get _ ',self)
     (let binding (pk-dynenv-ensure-binding dynenv self)
       `(pk-binding-get (',thunk.binding)))))
 
 (def-pk-optimize-expr-meta pk-lambdacalc-var-meta
-  (if (mem self lex)
+  (if (mem self local-lex)
     pk-mangle.self
+      (mem self env-lex)
+    `(pk-dynenv-get-meta _ ',self)
     (let binding (pk-dynenv-ensure-binding dynenv self)
       `(pk-binding-get-meta (',thunk.binding)))))
 
 (def-pk-optimize-expr pk-lambdacalc-set
-  (withs ((var val-expr)  self
-          val             (pk-optimize-expr val-expr dynenv lex))
-    (if (mem var lex)
+  (withs ((var val-expr) self
+          val (pk-optimize-expr val-expr dynenv local-lex env-lex))
+    (if (mem var local-lex)
       `(assign ,pk-mangle.var (pk-meta result ,val))
+        (mem var env-lex)
+      `(pk-dynenv-set _ ',var ,val)
       (let binding (pk-dynenv-ensure-binding dynenv var)
         `(pk-binding-set (',thunk.binding) ,val)))))
 
 (def-pk-optimize-expr-meta pk-lambdacalc-set-meta
-  (withs ((var val-expr)  self
-          val             (pk-optimize-expr-meta val-expr dynenv lex))
-    (if (mem var lex)
+  (withs ((var val-expr) self
+          val
+            (pk-optimize-expr-meta val-expr dynenv local-lex env-lex))
+    (if (mem var local-lex)
       `(assign ,pk-mangle.var ,val)
+        (mem var env-lex)
+      `(pk-dynenv-set-meta _ ',var ,val)
       (let binding (pk-dynenv-ensure-binding dynenv var)
         `(pk-binding-set-meta (',thunk.binding) ,val)))))
 
 (def-pk-optimize-expr pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
+          capturing-env     (some pk-captures-env body)
           arg-set           (dedup:join args rest)
-          innerlex          (union is arg-set lex))
+          inner-local-lex   (union is local-lex
+                                      (unless capturing-env arg-set))
+          inner-env-lex     (union is env-lex
+                                      (when capturing-env arg-set)))
     `(fn ,(ut.join-end (map pk-mangle args)
                        (when rest (pk-mangle car.rest)))
        ,@(when rest
@@ -167,12 +239,26 @@
                               (copylist ,var))))))
        ,@(map [let _ pk-mangle._ `(assign ,_ (pk-meta result ,_))]
               arg-set)
-       ,@(map [pk-optimize-expr _ dynenv innerlex] body))))
+       ,@(let body (map [pk-optimize-expr
+                          _ dynenv inner-local-lex inner-env-lex]
+                        body)
+           (case capturing-env nil body
+             `((let _ (pk-dynenv-shadow-sobj _
+                        (w/table it
+                          ,@(map [do
+                                   `(sref it (list ,pk-mangle._) ',_)]
+                                 arg-set)))
+                 ,@body)))))))
 
 
+; NOTE: In a compiled expression, when the current dynamic environment
+; might be captured, it's in the variable _.
 (def-pk-eval pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
-          arg-set           (dedup:join args rest))
+          capturing-env     (some pk-captures-env body)
+          arg-set           (dedup:join args rest)
+          local-lex         (unless capturing-env arg-set)
+          env-lex           (when capturing-env arg-set))
     (eval `(fn ,(ut.join-end (map pk-mangle args)
                              (when rest (pk-mangle car.rest)))
              ,@(when rest
@@ -182,7 +268,17 @@
              ,@(map [let _ pk-mangle._
                       `(assign ,_ (pk-meta result ,_))]
                     arg-set)
-             ,@(map [pk-optimize-expr _ dynenv arg-set] body)))))
+             ,@(let body (map [pk-optimize-expr
+                                _ dynenv local-lex env-lex]
+                              body)
+                 (case capturing-env nil body
+                   `((let _ (pk-dynenv-shadow-sobj ',dynenv
+                              (w/table it
+                                ,@(map [do `(sref it
+                                                  (list ,pk-mangle._)
+                                                  ',_)]
+                                       arg-set)))
+                       ,@body))))))))
 
 
 (def pk-thin-fn-rest-compiler (compiled-op body staticenv)
@@ -200,7 +296,7 @@
       (unless (all pk-soup-identifier (cons rest args))
         (err "A thin-fn-rest parameter wasn't an identifier."))
       (pk-compile-leaf-from-thunk staticenv
-        (thunk:let innerenv (pk-staticenv-shadow staticenv
+        (thunk:let innerenv (pk-staticenv-shadow-list staticenv
                               (cons (zap sym:car:rep rest)
                                     (zap [map sym:car:rep _] args)))
           (annotate 'pk-lambdacalc-thin-fn
@@ -222,7 +318,7 @@
         (err "A thin-fn parameter wasn't an identifier."))
       (zap [map sym:car:rep _] args)
       (pk-compile-leaf-from-thunk staticenv
-        (thunk:let innerenv (pk-staticenv-shadow staticenv args)
+        (thunk:let innerenv (pk-staticenv-shadow-list staticenv args)
           (annotate 'pk-lambdacalc-thin-fn
             (list args nil
               (map [pk-call:!get:rep:pk-soup-compile _ innerenv]

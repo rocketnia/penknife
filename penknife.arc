@@ -960,19 +960,19 @@
 
 (mac def-pk-eval (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self dynenv) ,@body)
+    `(let ,g-backing-fn (fn (self tagged-self dynenv fail) ,@body)
        (,rc!ontype pk-eval-meta (dynenv) ,type ,type
-         (pk-meta result (,g-backing-fn rep.self dynenv)))
+         (pk-meta result (,g-backing-fn rep.self self dynenv fail)))
        (,rc!ontype pk-eval (dynenv) ,type ,type
-         (,g-backing-fn rep.self dynenv)))))
+         (,g-backing-fn rep.self self dynenv fail)))))
 
 (mac def-pk-eval-meta (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self dynenv) ,@body)
+    `(let ,g-backing-fn (fn (self tagged-self dynenv fail) ,@body)
        (,rc!ontype pk-eval-meta (dynenv) ,type ,type
-         (,g-backing-fn rep.self dynenv))
+         (,g-backing-fn rep.self self dynenv fail))
        (,rc!ontype pk-eval (dynenv) ,type ,type
-         ((rep (,g-backing-fn rep.self dynenv)) 'result)))))
+         ((rep (,g-backing-fn rep.self self dynenv fail)) 'result)))))
 
 (def-pk-eval pk-lambdacalc-call
   (apply pk-call (map [pk-eval _ dynenv] self)))
