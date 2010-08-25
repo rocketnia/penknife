@@ -117,7 +117,7 @@
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; (pk-compose-compiler compiled-op body staticenv)
 ; (pk-assign-compiler compiled-op body staticenv)
-; (pk-assignmeta-compiler compiled-op body staticenv)
+; (pk-demeta-compiler compiled-op body staticenv)
 ; (pk-infix-call-compiler compiled-op body staticenv)
 ; (pk-generic-infix-compiler base-compiler)
 ;
@@ -179,9 +179,9 @@
 ;                 returns nil.
 ;
 ; pk-soup
-;   rep: A tagged proper list containing nonempty sequences (called
-;        "slurps") which contain arbitrary elements (called "sips").
-;        This is merely a list format which is specialized for holding
+;   rep: A proper list containing nonempty sequences (called "slurps")
+;        which contain arbitrary elements (called "sips"). This is
+;        merely a list format which is specialized for holding
 ;        elements that make sense to keep in dedicated string types,
 ;        such as characters and bytes.
 ;
@@ -190,13 +190,15 @@
 ;        correspond to any particular character.
 ;
 ; pk-bracketed-soup
-;   rep: A value of type 'pk-soup. This is soup which is semantically
-;        understood as being the interior of a pair of brackets. It
-;        often appears as a sip in another pk-bracketed-soup's soup in
-;        order to represent nested brackets.
+;   rep: A singleton proper list containing a value of type 'pk-soup.
+;        This is soup which is semantically understood as being the
+;        interior of a pair of brackets. It often appears as a sip in
+;        another pk-bracketed-soup's soup in order to represent nested
+;        brackets.
 ;
 ; pk-lambdacalc-literal
-;   rep: The value for this expression to evaluate to.
+;   rep: A singleton list containing the value for this expression to
+;        evaluate to.
 ;
 ; pk-lambdacalc-var
 ;   rep: A symbol representing the variable to look up in the dynamic
@@ -224,11 +226,9 @@
 ;   rep._.0:  A symbol representing the variable to modify in the
 ;             dynamic environment when evaluating this expression.
 ;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
-;             types, which will provide the new value for the variable
-;             (which will also be the result of this expression). If
-;             the new value has special metadata, that metadata will
-;             be given to the variable, and it will be returned as the
-;             metadata of this expression's result.
+;             types, which will provide the new metadata for the
+;             variable (and which will also be the non-metadata result
+;             of this expression).
 ;
 ; pk-lambdacalc-call
 ;   rep: A cons cell containing the expression for the operator and a
@@ -250,6 +250,12 @@
 ;        expression is a value of one of the
 ;        'pk-lambdacalc-[something] types. The expressions will be
 ;        evaluated from first to last and called with 'pk-call-meta.
+;
+; pk-lambdacalc-demeta
+;   rep: A singleton proper list containing a
+;        'pk-lambdacalc-[something] expression, which should be
+;        evaluated for its metadata so that that metadata can be
+;        returned as the non-metadata result of this expression.
 ;
 ; pk-compile-fork
 ;   rep: A table which supports the following fields:
@@ -288,8 +294,8 @@
 ;             apply the operators to.
 ;
 ; pk-ad-hoc-binding
-;   rep: A singleton list which supports getting and setting the
-;        following field:
+;   rep: A list which supports getting and setting the following
+;        field:
 ;   rep._.0:  A value of type 'pk-ad-hoc-meta, representing the
 ;             metadata associated with the variable represented by
 ;             this binding.
@@ -498,7 +504,8 @@
           (do rep.str!read
               (only.acc:check inside.chars ~empty)
               (= chars (outstring))
-              (push (annotate 'pk-bracketed-soup finish-brackets.str)
+              (push (annotate 'pk-bracketed-soup
+                      (list finish-brackets.str))
                     nonchars))
           (if (or no.char do.test.char)
             (do (only.acc:check inside.chars ~empty)
@@ -647,7 +654,7 @@
   (map sip->string self))
 
 (rc:ontype sip->string () pk-bracketed-soup pk-bracketed-soup
-  (+ "[" (soup->string rep.self) "]"))
+  (+ "[" (soup->string rep.self.0) "]"))
 
 
 (def pk-compile-leaf-from-thunk (staticenv getter)
@@ -661,7 +668,8 @@
 
 (def pk-compile-literal-from-thunk (compile-value staticenv)
   (pk-compile-leaf-from-thunk staticenv
-    (thunk:annotate 'pk-lambdacalc-literal call.compile-value)))
+    (thunk:annotate 'pk-lambdacalc-literal
+      (list call.compile-value))))
 
 (def pk-compile-call-from-thunk (compile-op-and-body op-compiler)
   (zap memo compile-op-and-body)
@@ -736,19 +744,24 @@
         (pk-call (!set:rep:pk-soup-compile var staticenv)
                  (pk-call:!get:rep:pk-soup-compile val staticenv))))))
 
-(def pk-assignmeta-compiler (compiled-op body staticenv)
-  (let token-args otokens.body
-    (unless (is len.token-args 2)
-      (err:+ "An assign-meta body didn't have exactly two words in "
-             "it."))
-    (let (var val-token) token-args
-      (unless pk-soup-identifier.var
-        (err "A name in an assign-meta form wasn't an identifier."))
-      (zap sym:car:rep var)
-      (pk-compile-leaf-from-thunk staticenv
-        (thunk:annotate 'pk-lambdacalc-set-meta
-          (list var (pk-call:!meta:rep:pk-soup-compile
-                      val-token staticenv)))))))
+(def pk-demeta-compiler (compiled-op body staticenv)
+  (let arg otokens.body
+    (unless single.arg
+      (err "A meta body didn't have exactly one word in it."))
+    (zap car arg)
+    (with (getter (memo:thunk:annotate 'pk-lambdacalc-demeta
+                    (list:pk-call:!meta:rep:pk-soup-compile
+                      arg staticenv))
+           var    (memo:thunk:if pk-soup-identifier.arg
+                    (sym:car:rep arg)
+                    (err:+ "The meta of a non-identifier can't be "
+                           "set.")))
+      (annotate 'pk-compile-fork
+        (obj get   getter
+             set   [annotate 'pk-lambdacalc-set-meta
+                     (list call.var _)]
+             meta  getter
+             op    pk-staticenv-default-op-compiler.staticenv)))))
 
 (def pk-infix-call-compiler (compiled-op body staticenv)
   (let token-args otokens.body
@@ -905,13 +918,13 @@
     (= op (if oi.oempty.op
             (pk-sip-compile pop.bodies staticenv)
             (pk-soup-compile op staticenv)))
-    (each body (map rep bodies)
+    (each body (map car:rep bodies)
       (zap [pk-call rep._!op _ body staticenv] op))
     op))
 
 (rc:ontype pk-sip-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
-  (zap rep self)
+  (zap car:rep self)
   (iflet (margin op rest) o-split-first-token.self
     (let compiled-op (pk-soup-compile op staticenv)
       (pk-call rep.compiled-op!op compiled-op rest staticenv))
@@ -984,7 +997,7 @@
   (apply pk-call-meta (map [pk-eval _ dynenv] self)))
 
 (def-pk-eval pk-lambdacalc-literal
-  self)
+  car.self)
 
 (def-pk-eval pk-lambdacalc-var
   (pk-dynenv-get dynenv self))
@@ -995,8 +1008,11 @@
 (def-pk-eval pk-lambdacalc-set
   (pk-dynenv-set dynenv self.0 (pk-eval self.1 dynenv)))
 
-(def-pk-eval-meta pk-lambdacalc-set-meta
-  (pk-dynenv-set-meta dynenv self.0 (pk-eval-meta self.1 dynenv)))
+(def-pk-eval pk-lambdacalc-set-meta
+  (pk-dynenv-set-meta dynenv self.0 (pk-eval self.1 dynenv)))
+
+(def-pk-eval pk-lambdacalc-demeta
+  (pk-eval-meta car.self dynenv))
 
 (rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
   (pk-eval (pk-call rep.self!get) dynenv))
@@ -1057,10 +1073,6 @@
   (pk-meta compile-fork (list:pk-compile-fork-from-op
                           pk-assign-compiler)))
 
-(pk-dynenv-set-meta pk-replenv* 'meta=
-  (pk-meta compile-fork (list:pk-compile-fork-from-op
-                          pk-assignmeta-compiler)))
-
 (pk-dynenv-set-meta pk-replenv* ':
   (pk-meta result        (fn args1
                            (fn args2
@@ -1074,6 +1086,11 @@
   (pk-meta result        idfn
            compile-fork  (list:pk-compile-fork-from-op
                            pk-infix-call-compiler)))
+
+(pk-dynenv-set-meta pk-replenv* 'meta
+  (pk-meta result         idfn
+           compile-fork   (list:pk-compile-fork-from-op
+                            pk-demeta-compiler)))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is

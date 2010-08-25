@@ -129,6 +129,10 @@
   nil)
 
 (rc:ontype pk-captures-env ()
+             pk-lambdacalc-demeta pk-lambdacalc-demeta
+  nil)
+
+(rc:ontype pk-captures-env ()
              pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
   nil)
 
@@ -175,7 +179,7 @@
      ,@(map [pk-optimize-expr _ dynenv local-lex env-lex] self)))
 
 (def-pk-optimize-expr pk-lambdacalc-literal
-  `',self)
+  `',car.self)
 
 ; NOTE: In the following rules, we wrap the bindings we get in thunks
 ; so that their identities are preserved in official Arc 3.1 and
@@ -212,16 +216,18 @@
       (let binding (pk-dynenv-ensure-binding dynenv var)
         `(pk-binding-set (',thunk.binding) ,val)))))
 
-(def-pk-optimize-expr-meta pk-lambdacalc-set-meta
+(def-pk-optimize-expr pk-lambdacalc-set-meta
   (withs ((var val-expr) self
-          val
-            (pk-optimize-expr-meta val-expr dynenv local-lex env-lex))
+          val (pk-optimize-expr val-expr dynenv local-lex env-lex))
     (if (mem var local-lex)
       `(assign ,pk-mangle.var ,val)
         (mem var env-lex)
       `(pk-dynenv-set-meta _ ',var ,val)
       (let binding (pk-dynenv-ensure-binding dynenv var)
         `(pk-binding-set-meta (',thunk.binding) ,val)))))
+
+(def-pk-optimize-expr pk-lambdacalc-demeta
+  (pk-optimize-expr-meta car.self dynenv local-lex env-lex))
 
 (def-pk-optimize-expr pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
@@ -292,7 +298,7 @@
                    (isa rep.args.0.0 'pk-bracketed-soup))
         (err:+ "A thin-fn-rest parameter list wasn't a "
                "'pk-bracketed-soup."))
-      (zap otokens:rep:caar:rep args)
+      (zap otokens:car:rep:caar:rep args)
       (unless (all pk-soup-identifier (cons rest args))
         (err "A thin-fn-rest parameter wasn't an identifier."))
       (pk-compile-leaf-from-thunk staticenv
@@ -313,7 +319,7 @@
                    (single rep.args.0)
                    (isa rep.args.0.0 'pk-bracketed-soup))
         (err "A thin-fn parameter list wasn't a 'pk-bracketed-soup."))
-      (zap otokens:rep:caar:rep args)
+      (zap otokens:car:rep:caar:rep args)
       (unless (all pk-soup-identifier args)
         (err "A thin-fn parameter wasn't an identifier."))
       (zap [map sym:car:rep _] args)
