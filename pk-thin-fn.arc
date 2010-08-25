@@ -134,7 +134,7 @@
 
 (rc:ontype pk-captures-env ()
              pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
-  nil)
+  (some pk-captures-env rep.self.2))
 
 
 (mac def-pk-optimize-expr (type . body)
