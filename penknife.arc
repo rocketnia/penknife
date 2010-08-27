@@ -169,7 +169,9 @@
 ; pk-replenv*                       ; value of type 'pk-ad-hoc-env
 ;
 ; (error-message error)
+; (pktl env str act-on report-error prompt)
 ; (pkrepl (o str (errsafe:stdin)))
+; (pkload env filename)
 ;
 ;
 ; Type listing:
@@ -1164,27 +1166,40 @@
     jvm!getMessage.error
     (err "The argument to 'error-message wasn't an error.")))
 
+(def pktl (env str act-on report-error prompt)
+  (zap newline-normalizer str)
+  ; NOTE: Jarc's 'on-err suppresses escape continuations, so
+  ; 'catch:until:do and 'throw would fail here.
+  (car:catch:until:only.throw:do
+    prompt.str                    ; Wait for more input.
+    (let expr (pk-staticenv-read-compile-tl env str)
+      (on-err [do (do.report-error error-message._) nil]
+        (thunk:let meta (pk-eval-meta expr env)
+          (iflet (action) rep.meta!action
+            pk-call.action
+            do.act-on.meta)
+          (whenlet (quit) rep.meta!quit
+            list.quit))))))
+
 ; NOTE: On Rainbow, (stdin), of all things, produces an error. When
 ; that happens, we go get it ourselves.
 (def pkrepl ((o str (errsafe:stdin)))
   (when (and no.str jv.jclass!rainbow-functions-IO)
     (= str (jvm!rainbow-functions-IO-stdIn)))
-  (zap newline-normalizer str)
-  ; NOTE: Jarc's 'on-err suppresses escape continuations, so
-  ; 'catch:while:on-err and 'throw would fail here.
-  (car:catch:until:only.throw:do
-    ; Show the prompt unless there's a non-whitespace character
-    ; ready.
-    (unless (catch:while rep.str!ready
-              (if (whitec rep.str!peek)
-                rep.str!read
-                throw.t))
-      (pr "pk> "))
-    (let expr (pk-staticenv-read-compile-tl pk-replenv* str)
-      (on-err [do (prn "Error: " error-message._) nil]
-        (thunk:let meta (pk-eval-meta expr pk-replenv*)
-          (iflet (action) rep.meta!action
-            pk-call.action
-            (do (write pk-demeta.meta) (prn)))
-          (iflet (quit) rep.meta!quit
-            list.quit))))))
+  (pktl pk-replenv*
+        str
+        [do (write pk-demeta._) (prn)]
+        [prn "Error: " _]
+        ; Show the prompt unless there's a non-whitespace character
+        ; ready.
+        [unless (catch:while rep._!ready
+                  (if (whitec rep._!peek)
+                    rep._!read
+                    throw.t))
+          (pr "pk> ")]))
+
+; NOTE: Rainbow doesn't like [].
+(def pkload (env filename)
+  ; Don't display any results, raise all errors, and don't show any
+  ; prompts.
+  (w/infile str filename (pktl env str [do] err [do])))
