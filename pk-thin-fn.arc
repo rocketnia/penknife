@@ -307,7 +307,7 @@
                                     (zap [map sym:car:rep _] args)))
           (annotate 'pk-lambdacalc-thin-fn
             (list args list.rest
-              (map [pk-call:!get:rep:pk-soup-compile _ innerenv]
+              (map [pk-fork-to-get:pk-soup-compile _ innerenv]
                    body))))))))
 
 (def pk-thin-fn-compiler (compiled-op body staticenv)
@@ -327,7 +327,7 @@
         (thunk:let innerenv (pk-staticenv-shadow-list staticenv args)
           (annotate 'pk-lambdacalc-thin-fn
             (list args nil
-              (map [pk-call:!get:rep:pk-soup-compile _ innerenv]
+              (map [pk-fork-to-get:pk-soup-compile _ innerenv]
                    body))))))))
 
 

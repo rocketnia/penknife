@@ -90,13 +90,13 @@
 (def pk-hefty-fn-rest-compiler (compiled-op body staticenv)
   (pk-compile-leaf-from-thunk staticenv
     (thunk:annotate 'pk-lambdacalc-hefty-fn
-      (pk-call:!get:rep:pk-thin-fn-rest-compiler
+      (pk-fork-to-get:pk-thin-fn-rest-compiler
         compiled-op body staticenv))))
 
 (def pk-hefty-fn-compiler (compiled-op body staticenv)
   (pk-compile-leaf-from-thunk staticenv
     (thunk:annotate 'pk-lambdacalc-hefty-fn
-      (pk-call:!get:rep:pk-thin-fn-compiler
+      (pk-fork-to-get:pk-thin-fn-compiler
         compiled-op body staticenv))))
 
 

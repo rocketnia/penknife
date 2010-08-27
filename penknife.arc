@@ -108,6 +108,12 @@
 ; (soup->string soup)
 ; (sip->string self)   ; rulebook
 ;
+; (pk-fork-to-get self)                       ; rulebook
+; (pk-fork-to-set self new-value)             ; rulebook
+; (pk-fork-to-meta self)                      ; rulebook
+; (pk-fork-to-op-method self)                 ; rulebook
+; (pk-fork-to-op compiled-op body staticenv)
+;
 ; (pk-compile-leaf-from-thunk staticenv getter)
 ; (pk-compile-literal-from-thunk compile-value staticenv)
 ; (pk-compile-call-from-thunk compile-op-and-body op-compiler)
@@ -659,6 +665,23 @@
   (+ "[" (soup->string rep.self.0) "]"))
 
 
+(rc:ontype pk-fork-to-get () pk-compile-fork pk-compile-fork
+  (pk-call rep.self!get))
+
+(rc:ontype pk-fork-to-set (new-value) pk-compile-fork pk-compile-fork
+  (pk-call rep.self!set new-value))
+
+(rc:ontype pk-fork-to-meta () pk-compile-fork pk-compile-fork
+  (pk-call rep.self!meta))
+
+(rc:ontype pk-fork-to-op-method () pk-compile-fork pk-compile-fork
+  rep.self!op)
+
+(def pk-fork-to-op (compiled-op body staticenv)
+  (pk-call pk-fork-to-op-method.compiled-op
+    compiled-op body staticenv))
+
+
 (def pk-compile-leaf-from-thunk (staticenv getter)
   (zap memo getter)
   (annotate 'pk-compile-fork
@@ -698,8 +721,8 @@
 
 (def pk-function-call-compiler (compiled-op body staticenv)
   (pk-compile-call-from-thunk
-    (thunk:cons (pk-call rep.compiled-op!get)
-      (map [pk-call:!get:rep:pk-soup-compile _ staticenv]
+    (thunk:cons pk-fork-to-get.compiled-op
+      (map [pk-fork-to-get:pk-soup-compile _ staticenv]
            otokens.body))
     pk-staticenv-default-op-compiler.staticenv))
 
@@ -723,19 +746,19 @@
                                  (pk-compile-literal-from-thunk
                                    thunk.idfn staticenv)))
     (pk-compile-call-from-thunk
-      (thunk:map pk-call:!get:rep
+      (thunk:map pk-fork-to-get
         (cons compiled-op
           (when token-args
             (cons call.compile-first-arg
               (map [pk-soup-compile _ staticenv] cdr.token-args)))))
       (fn (compiled-op2 body2 staticenv2)
         (let compiled-composed-op call.compile-first-arg
-          (pk-call rep.compiled-composed-op!op
-            compiled-composed-op
-            (case cdr.token-args nil body2
-              (annotate 'pk-soup (list:list:annotate 'pk-sip-compose
-                                   (list cdr.token-args body2))))
-            staticenv2))))))
+          (pk-fork-to-op compiled-composed-op
+                         (case cdr.token-args nil body2
+                           (annotate 'pk-soup
+                             (list:list:annotate 'pk-sip-compose
+                               (list cdr.token-args body2))))
+                         staticenv2))))))
 
 (def pk-assign-compiler (compiled-op body staticenv)
   (let token-args otokens.body
@@ -743,8 +766,9 @@
       (err "An assignment body didn't have exactly two words in it."))
     (pk-compile-leaf-from-thunk staticenv
       (thunk:let (var val) token-args
-        (pk-call (!set:rep:pk-soup-compile var staticenv)
-                 (pk-call:!get:rep:pk-soup-compile val staticenv))))))
+        (pk-fork-to-set
+          (pk-soup-compile var staticenv)
+          (pk-fork-to-get:pk-soup-compile val staticenv))))))
 
 (def pk-demeta-compiler (compiled-op body staticenv)
   (let arg otokens.body
@@ -752,7 +776,7 @@
       (err "A meta body didn't have exactly one word in it."))
     (zap car arg)
     (with (getter (memo:thunk:annotate 'pk-lambdacalc-demeta
-                    (list:pk-call:!meta:rep:pk-soup-compile
+                    (list:pk-fork-to-meta:pk-soup-compile
                       arg staticenv))
            var    (memo:thunk:if pk-soup-identifier.arg
                     (sym:car:rep arg)
@@ -772,13 +796,13 @@
     (pk-soup-compile car.token-args staticenv)))
 
 (def pk-infix-inverted-call-compiler (compiled-op body staticenv)
-  (let as-default (memo:thunk:rep:pk-call
+  (let as-default (memo:thunk:pk-call
                     pk-staticenv-default-op-compiler.staticenv
                     compiled-op body staticenv)
     (annotate 'pk-compile-fork
-      (obj get   (memo:thunk:pk-call call.as-default!get)
+      (obj get   (memo:thunk:pk-fork-to-get call.as-default)
            set   [err "A once-applied \"'\" form can't be set."]
-           meta  (memo:thunk:pk-call call.as-default!meta)
+           meta  (memo:thunk:pk-fork-to-meta call.as-default)
            op    (fn (compiled-op2 body2 staticenv2)
                    (let token-args otokens.body2
                      (unless single.token-args
@@ -786,25 +810,25 @@
                               "have exactly one word in it."))
                      (let compiled-inner-op
                             (pk-soup-compile car.token-args staticenv)
-                       (pk-call rep.compiled-inner-op!op
+                       (pk-fork-to-op
                          compiled-inner-op body staticenv))))))))
 
 (def pk-generic-infix-compiler (base-compiler)
   (fn (compiled-op1 body1 staticenv1)
     (pk-compile-call-from-thunk
-      (thunk:map pk-call:!get:rep
+      (thunk:map pk-fork-to-get
         (cons compiled-op1
           (map [pk-soup-compile _ staticenv1] otokens.body1)))
       (fn (compiled-op2 body2 staticenv2)
         (let compile-op
-               (memo:thunk:!op:rep:do.base-compiler
+               (memo:thunk:pk-fork-to-op-method:do.base-compiler
                  compiled-op1
                  (let s (annotate 'pk-soup
                           (list:list:annotate 'pk-soup-whitec nil))
                    (o+ body1 s body2))
                  staticenv2)
           (pk-compile-call-from-thunk
-            (thunk:map pk-call:!get:rep
+            (thunk:map pk-fork-to-get
               (cons compiled-op2
                 (map [pk-soup-compile _ staticenv2] otokens.body2)))
             (fn (compiled-op3 body3 staticenv3)
@@ -896,7 +920,7 @@
     (and (single rep.x) (pk-string-identifier rep.x.0))))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) expression
-  (pk-call:!meta:rep:pk-soup-compile soup staticenv))
+  (pk-fork-to-meta:pk-soup-compile soup staticenv))
 
 (mr:rule pk-soup-compile (soup staticenv) one-sip
   (zap rep soup)
@@ -922,10 +946,9 @@
     (if oi.oempty.left
       (do.fail:+ "The word started with its only infix operator, so "
                  "it wasn't an infix form.")
-      (withs (compiled-op    (pk-soup-compile op staticenv)
-              compiled-left  (pk-call rep.compiled-op!op
-                               compiled-op left staticenv))
-        (pk-call rep.compiled-left!op compiled-left right staticenv)))
+      (ut:lets it (pk-soup-compile op staticenv)
+               it (pk-fork-to-op it left staticenv)
+                  (pk-fork-to-op it right staticenv)))
     (do.fail "The word didn't contain an infix operator.")))
 
 (mr:rule pk-soup-compile (soup staticenv) prefix
@@ -939,28 +962,27 @@
             (pk-sip-compile pop.bodies staticenv)
             (pk-soup-compile op staticenv)))
     (each body (map car:rep bodies)
-      (zap [pk-call rep._!op _ body staticenv] op))
+      (zap [pk-fork-to-op _ body staticenv] op))
     op))
 
 (rc:ontype pk-sip-compile (staticenv)
              pk-bracketed-soup pk-bracketed-soup
   (zap car:rep self)
   (iflet (margin op rest) o-split-first-token.self
-    (let compiled-op (pk-soup-compile op staticenv)
-      (pk-call rep.compiled-op!op compiled-op rest staticenv))
+    (pk-fork-to-op (pk-soup-compile op staticenv) rest staticenv)
     (do.fail "The syntax was an empty pair of brackets.")))
 
 (rc:ontype pk-sip-compile (staticenv) pk-sip-compose pk-sip-compose
   (let (ops body) rep.self
     (iflet (first . rest) ops
       (let compiled-op (pk-soup-compile first staticenv)
-        (pk-call rep.compiled-op!op
-          compiled-op
-          (if rest
-            (annotate 'pk-soup
-              (list:list:annotate 'pk-sip-compose (list rest body)))
-            body)
-          staticenv))
+        (pk-fork-to-op compiled-op
+                       (if rest
+                         (annotate 'pk-soup
+                           (list:list:annotate 'pk-sip-compose
+                             (list rest body)))
+                         body)
+                       staticenv))
       (do.fail:+ "The syntax was a composition form with nothing "
                  "composed."))))
 
@@ -1035,13 +1057,13 @@
   (pk-eval-meta car.self dynenv))
 
 (rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval (pk-call rep.self!get) dynenv))
+  (pk-eval pk-fork-to-get.self dynenv))
 
 (rc:ontype pk-eval (env) pk-soup pk-soup
   (pk-eval (pk-soup-compile self env) env))
 
 (rc:ontype pk-eval-meta (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval-meta (pk-call rep.self!meta) dynenv))
+  (pk-eval-meta pk-fork-to-meta.self dynenv))
 
 (rc:ontype pk-eval-meta (env) pk-soup pk-soup
   (pk-eval-meta (pk-soup-compile self env) env))
