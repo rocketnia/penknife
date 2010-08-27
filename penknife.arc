@@ -1193,7 +1193,8 @@
     (= str (jvm!rainbow-functions-IO-stdIn)))
   (pktl pk-replenv*
         str
-        [do (write pk-demeta._) (prn)]
+        [on-err [prn "Error writing: " error-message._]
+          (fn () (write pk-demeta._) (prn))]
         [prn "Error: " _]
         ; Show the prompt unless there's a non-whitespace character
         ; ready.
