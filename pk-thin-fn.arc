@@ -93,7 +93,7 @@
     (pr "pk--")
     ; NOTE: Jarc's readc returns the character equivalent of -1 on
     ; EOF.
-    (whilet char (check readc.s [~is int._ -1])
+    (whilet char (check readc.s [and _ (~is int._ -1)])
       (if (or letter.char digit.char)
         writec.char
           (is char #\-)
