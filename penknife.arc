@@ -1170,8 +1170,10 @@
       (pr "pk> "))
     (let meta (pk-staticenv-read-eval-tl pk-replenv* str)
       (on-err [do (prn "Error: " error-message._) nil]
-        (fn () (only.err rep.meta!error)
-               (aif rep.meta!action
-                 (pk-call car.it)
-                 (do (write rep.meta!result) (prn)))
-               rep.meta!quit)))))
+        (fn () (iflet (action) rep.meta!action
+                 pk-call.action
+                 (do (only.err rep.meta!error)
+                     (write rep.meta!result)
+                     (prn)))
+               (iflet (quit) rep.meta!quit
+                 list.quit))))))
