@@ -1164,6 +1164,11 @@
     details.error
       (jv.ajava error 'jarc.JarcError)
     jvm!getMessage.error
+      ; Some Jarc errors are Errors from the JVM runtime itself, such
+      ; as StackOverflowErrors and OutOfMemoryErrors. Jarc doesn't
+      ; wrap these errors in anything, but it does let us catch them.
+      (jv.ajava error 'java.lang.Throwable)
+    (+ "" error)
     (err "The argument to 'error-message wasn't an error.")))
 
 (def pktl (env str act-on report-error prompt)

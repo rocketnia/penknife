@@ -91,7 +91,9 @@
 (def pk-mangle (name)
   (sym:tostring:w/instring s (string:or name "nil")
     (pr "pk--")
-    (whilet char readc.s
+    ; NOTE: Jarc's readc returns the character equivalent of -1 on
+    ; EOF.
+    (whilet char (check readc.s [~is int._ -1])
       (if (or letter.char digit.char)
         writec.char
           (is char #\-)
