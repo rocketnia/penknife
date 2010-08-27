@@ -138,6 +138,7 @@
 ;
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
+; (pk-staticenv-read-eval-tl self str)          ; rulebook
 ; (pk-dynenv-ensure-binding self varname)       ; rulebook
 ; (pk-dynenv-get-binding self varname)          ; rulebook
 ; (pk-dynenv-get self varname)                  ; rulebook
@@ -869,6 +870,12 @@
              pk-ad-hoc-env pk-ad-hoc-env
   pk-function-call-compiler)
 
+; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
+(rc:ontype pk-staticenv-read-eval-tl (str) pk-ad-hoc-env pk-ad-hoc-env
+  (aif (start-word&finish-bracket-word comment-ignorer.str)
+    (pk-eval-tl it self)
+    (pk-meta action (list:fn ()) quit list!goodbye)))
+
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
 (rc:ontype pk-dynenv-ensure-binding (varname)
@@ -1150,25 +1157,21 @@
 (def pkrepl ((o str (errsafe:stdin)))
   (when (and no.str jv.jclass!rainbow-functions-IO)
     (= str (jvm!rainbow-functions-IO-stdIn)))
-  (zap newline-normalizer:fn-input-ify str)
+  (zap newline-normalizer str)
   ; NOTE: Jarc's 'on-err suppresses escape continuations, so
   ; 'catch:while:on-err and 'throw would fail here.
-  (car:catch:until:only.throw:on-err [do1 nil (prn "Error: "
-                                                error-message._)]
-    (fn ()
-      ; Show the prompt unless there's a non-whitespace character
-      ; ready.
-      (unless (catch:while rep.str!ready
-                (if (whitec rep.str!peek)
-                  rep.str!read
-                  throw.t))
-        (pr "pk> "))
-      (aif (start-word&finish-bracket-word comment-ignorer.str)
-        (let meta (pk-eval-tl it pk-replenv*)
-          (only.err rep.meta!error)
-          (aif rep.meta!action
-            (pk-call car.it)
-            (do (write rep.meta!result) (prn)))
-          (whenlet (quit) rep.meta!quit
-            list.quit))
-        list!goodbye))))
+  (car:catch:until:only.throw:do
+    ; Show the prompt unless there's a non-whitespace character
+    ; ready.
+    (unless (catch:while rep.str!ready
+              (if (whitec rep.str!peek)
+                rep.str!read
+                throw.t))
+      (pr "pk> "))
+    (let meta (pk-staticenv-read-eval-tl pk-replenv* str)
+      (on-err [do (prn "Error: " error-message._) nil]
+        (fn () (only.err rep.meta!error)
+               (aif rep.meta!action
+                 (pk-call car.it)
+                 (do (write rep.meta!result) (prn)))
+               rep.meta!quit)))))
