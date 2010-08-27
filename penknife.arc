@@ -139,7 +139,7 @@
 ;
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
-; (pk-staticenv-read-eval-tl self str)          ; rulebook
+; (pk-staticenv-read-compile-tl self str)       ; rulebook
 ; (pk-dynenv-ensure-binding self varname)       ; rulebook
 ; (pk-dynenv-get-binding self varname)          ; rulebook
 ; (pk-dynenv-get self varname)                  ; rulebook
@@ -208,6 +208,10 @@
 ; pk-lambdacalc-literal
 ;   rep: A singleton list containing the value for this expression to
 ;        evaluate to.
+;
+; pk-lambdacalc-literal-meta
+;   rep: A singleton list containing the metadata for this expression
+;        to evaluate to.
 ;
 ; pk-lambdacalc-var
 ;   rep: A symbol representing the variable to look up in the dynamic
@@ -874,10 +878,12 @@
   pk-function-call-compiler)
 
 ; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
-(rc:ontype pk-staticenv-read-eval-tl (str) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-staticenv-read-compile-tl (str)
+             pk-ad-hoc-env pk-ad-hoc-env
   (aif (start-word&finish-bracket-word comment-ignorer.str)
-    (pk-eval-tl it self)
-    (pk-meta action (list:fn ()) quit list!goodbye)))
+    (pk-soup-compile-tl it self)
+    (annotate 'pk-lambdacalc-literal-meta
+      (list:pk-meta action (list:fn ()) quit list!goodbye))))
 
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
@@ -1044,6 +1050,9 @@
 (def-pk-eval pk-lambdacalc-literal
   car.self)
 
+(def-pk-eval-meta pk-lambdacalc-literal-meta
+  car.self)
+
 (def-pk-eval pk-lambdacalc-var
   (pk-dynenv-get dynenv self))
 
@@ -1171,10 +1180,11 @@
                 rep.str!read
                 throw.t))
       (pr "pk> "))
-    (let meta (pk-staticenv-read-eval-tl pk-replenv* str)
+    (let expr (pk-staticenv-read-compile-tl pk-replenv* str)
       (on-err [do (prn "Error: " error-message._) nil]
-        (fn () (iflet (action) rep.meta!action
-                 pk-call.action
-                 (do (write pk-demeta.meta) (prn)))
-               (iflet (quit) rep.meta!quit
-                 list.quit))))))
+        (thunk:let meta (pk-eval-meta expr pk-replenv*)
+          (iflet (action) rep.meta!action
+            pk-call.action
+            (do (write pk-demeta.meta) (prn)))
+          (iflet (quit) rep.meta!quit
+            list.quit))))))

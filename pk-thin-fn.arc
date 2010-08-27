@@ -114,6 +114,10 @@
              pk-lambdacalc-literal pk-lambdacalc-literal
   nil)
 
+(rc:ontype pk-captures-env ()
+             pk-lambdacalc-literal-meta pk-lambdacalc-literal-meta
+  nil)
+
 (rc:ontype pk-captures-env () pk-lambdacalc-var pk-lambdacalc-var
   nil)
 
@@ -178,7 +182,12 @@
      ,@(map [pk-optimize-expr _ dynenv local-lex env-lex] self)))
 
 (def-pk-optimize-expr pk-lambdacalc-literal
-  `',car.self)
+  (zap car self)
+  `(',thunk.self))
+
+(def-pk-optimize-expr-meta pk-lambdacalc-literal-meta
+  (zap car self)
+  `(',thunk.self))
 
 ; NOTE: In the following rules, we wrap the bindings we get in thunks
 ; so that their identities are preserved in official Arc 3.1 and
