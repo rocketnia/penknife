@@ -129,6 +129,7 @@
 ; (pk-generic-infix-compiler base-compiler)
 ;
 ; (pk-meta . args)                      ; macro
+; (pk-demeta meta)
 ; (pk-make-ad-hoc-binding value)
 ; (pk-make-ad-hoc-binding-meta value)
 ; (pk-binding-get self)                 ; rulebook
@@ -833,6 +834,10 @@
 (mac pk-meta args
   `(annotate 'pk-ad-hoc-meta (obj ,@args)))
 
+(def pk-demeta (meta)
+  (only.err rep.meta!error)
+  rep.meta!result)
+
 ; TODO: See if this is ever going to be used.
 (def pk-make-ad-hoc-binding (value)
   (pk-make-ad-hoc-binding-meta:pk-meta result value))
@@ -841,9 +846,7 @@
   (annotate 'pk-ad-hoc-binding list.value))
 
 (rc:ontype pk-binding-get () pk-ad-hoc-binding pk-ad-hoc-binding
-  (let meta pk-binding-get-meta.self
-    (only.err rep.meta!error)
-    rep.meta!result))
+  (pk-demeta pk-binding-get-meta.self))
 
 (rc:ontype pk-binding-get-meta () pk-ad-hoc-binding pk-ad-hoc-binding
   rep.self.0)
@@ -991,7 +994,7 @@
   (apply self args))
 
 (rc:ontype pk-call args pk-fn-meta pk-fn-meta
-  (!result:rep:apply pk-call rep.self.0 args))
+  (pk-demeta:apply pk-call rep.self.0 args))
 
 (rc:ontype pk-call args rc.list list
   (unless single.args
@@ -1027,7 +1030,7 @@
        (,rc!ontype pk-eval-meta (dynenv) ,type ,type
          (,g-backing-fn rep.self self dynenv fail))
        (,rc!ontype pk-eval (dynenv) ,type ,type
-         ((rep (,g-backing-fn rep.self self dynenv fail)) 'result)))))
+         (pk-demeta (,g-backing-fn rep.self self dynenv fail))))))
 
 (def-pk-eval pk-lambdacalc-call
   (apply pk-call (map [pk-eval _ dynenv] self)))
@@ -1172,8 +1175,6 @@
       (on-err [do (prn "Error: " error-message._) nil]
         (fn () (iflet (action) rep.meta!action
                  pk-call.action
-                 (do (only.err rep.meta!error)
-                     (write rep.meta!result)
-                     (prn)))
+                 (do (write pk-demeta.meta) (prn)))
                (iflet (quit) rep.meta!quit
                  list.quit))))))

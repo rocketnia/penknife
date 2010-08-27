@@ -158,9 +158,8 @@
               ,@body)
        (,rc!ontype pk-optimize-expr (dynenv local-lex env-lex)
                      ,type ,type
-         `( (rep ,(,g-backing-fn
-                    rep.self self dynenv local-lex env-lex fail))
-            'result))
+         `(pk-demeta ,(,g-backing-fn
+                        rep.self self dynenv local-lex env-lex fail)))
        (,rc!ontype pk-optimize-expr-meta (dynenv local-lex env-lex)
                      ,type ,type
          (,g-backing-fn
@@ -190,9 +189,7 @@
 
 (def-pk-optimize-expr pk-lambdacalc-var
   (if (mem self local-lex)
-    `(let _ (rep ,pk-mangle.self)
-       (aif _!error err.it)
-       _!result)
+    `(pk-demeta ,pk-mangle.self)
       (mem self env-lex)
     `(pk-dynenv-get _ ',self)
     (let binding (pk-dynenv-ensure-binding dynenv self)
