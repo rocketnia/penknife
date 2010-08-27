@@ -306,10 +306,11 @@
 ;        lists containing their bindings.
 ;
 ; pk-fn-meta
-;   rep: A function which returns a value of type 'pk-ad-hoc-meta.
-;        This function will be called using the arguments from
-;        'pk-call or 'pk-call-meta, but only 'pk-call-meta will return
-;        the full command metadata.
+;   rep: A singleton proper list containing a Penknife function which
+;        returns a value of type 'pk-ad-hoc-meta. The inner function
+;        will be called using 'pk-call using the arguments from this
+;        object's 'pk-call or 'pk-call-meta, but only 'pk-call-meta
+;        will return the full command metadata.
 ;
 ; pk-ad-hoc-meta
 ;   rep: A table which supports the following fields:
@@ -968,7 +969,7 @@
   (apply self args))
 
 (rc:ontype pk-call args pk-fn-meta pk-fn-meta
-  (!result:rep:apply rep.self args))
+  (!result:rep:apply pk-call rep.self.0 args))
 
 (rc:ontype pk-call args pk-linklist pk-linklist
   (unless single.args
@@ -981,7 +982,7 @@
   [= (rep.self car.args) _])
 
 (rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
-  (apply pk-call rep.self args))
+  (apply pk-call rep.self.0 args))
 
 (mr:rule pk-call-meta (op . args) default
   (pk-meta result (apply pk-call op args)))
@@ -1068,7 +1069,7 @@
 (pk-dynenv-set pk-replenv* '+ +)
 
 (pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
-                                   (fn ((o code 'goodbye))
+                                   (list:fn ((o code 'goodbye))
                                      (pk-meta echoless  t
                                               quit      list.code))))
 
@@ -1096,6 +1097,8 @@
   (pk-meta result         idfn
            compile-fork   (list:pk-compile-fork-from-op
                             pk-demeta-compiler)))
+
+(pk-dynenv-set pk-replenv* 'command [annotate 'pk-fn-meta list._])
 
 (pk-dynenv-set-meta pk-replenv* ':
   (pk-meta result        (fn args1
