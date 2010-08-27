@@ -355,9 +355,6 @@
 ;                         metadata, is looked up in a binding or
 ;                         environment. If instead this is nil, then no
 ;                         error is raised.
-;
-; pk-linklist
-;   rep: An Arc proper list.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -993,15 +990,15 @@
 (rc:ontype pk-call args pk-fn-meta pk-fn-meta
   (!result:rep:apply pk-call rep.self.0 args))
 
-(rc:ontype pk-call args pk-linklist pk-linklist
+(rc:ontype pk-call args rc.list list
   (unless single.args
-    (do.fail "A 'pk-linklist takes one argument."))
-  (rep.self car.args))
+    (do.fail "A list takes one argument."))
+  (self car.args))
 
-(rc:ontype pk-call-set args pk-linklist pk-linklist
+(rc:ontype pk-call-set args rc.list list
   (unless single.args
-    (do.fail "A 'pk-linklist takes one argument."))
-  [= (rep.self car.args) _])
+    (do.fail "A list takes one argument."))
+  [= (self car.args) _])
 
 (rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
   (apply pk-call rep.self.0 args))

@@ -241,8 +241,7 @@
                        (when rest (pk-mangle car.rest)))
        ,@(when rest
            (let var (pk-mangle car.rest)
-             `((assign ,var (annotate 'pk-linklist
-                              (copylist ,var))))))
+             `((assign ,var (copylist ,var)))))
        ,@(map [let _ pk-mangle._ `(assign ,_ (pk-meta result ,_))]
               arg-set)
        ,@(let body (map [pk-optimize-expr
@@ -269,8 +268,7 @@
                              (when rest (pk-mangle car.rest)))
              ,@(when rest
                  (let var (pk-mangle car.rest)
-                   `((assign ,var (annotate 'pk-linklist
-                                    (copylist ,var))))))
+                   `((assign ,var (copylist ,var)))))
              ,@(map [let _ pk-mangle._
                       `(assign ,_ (pk-meta result ,_))]
                     arg-set)
