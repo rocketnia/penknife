@@ -92,7 +92,7 @@
 ;
 ; (start-word str (o test ~whitec))
 ; (finish-bracket-word str (o test whitec))
-; (finish-brackets (str))
+; (finish-brackets str)
 ;
 ; (soup-whitec x)
 ; (orev self)                                     ; rulebook
@@ -119,6 +119,7 @@
 ; (pk-assign-compiler compiled-op body staticenv)
 ; (pk-demeta-compiler compiled-op body staticenv)
 ; (pk-infix-call-compiler compiled-op body staticenv)
+; (pk-infix-inverted-call-compiler compiled-op body staticenv)
 ; (pk-generic-infix-compiler base-compiler)
 ;
 ; (pk-meta . args)                      ; macro
@@ -769,6 +770,24 @@
       (err "A \".\" body didn't have exactly one word in it."))
     (pk-soup-compile car.token-args staticenv)))
 
+(def pk-infix-inverted-call-compiler (compiled-op body staticenv)
+  (let as-default (memo:thunk:rep:pk-call
+                    pk-staticenv-default-op-compiler.staticenv
+                    compiled-op body staticenv)
+    (annotate 'pk-compile-fork
+      (obj get   (memo:thunk:pk-call call.as-default!get)
+           set   [err "A once-applied \"'\" form can't be set."]
+           meta  (memo:thunk:pk-call call.as-default!meta)
+           op    (fn (compiled-op2 body2 staticenv2)
+                   (let token-args otokens.body2
+                     (unless single.token-args
+                       (err:+ "The second body of a \"'\" didn't "
+                              "have exactly one word in it."))
+                     (let compiled-inner-op
+                            (pk-soup-compile car.token-args staticenv)
+                       (pk-call rep.compiled-inner-op!op
+                         compiled-inner-op body staticenv))))))))
+
 (def pk-generic-infix-compiler (base-compiler)
   (fn (compiled-op1 body1 staticenv1)
     (pk-compile-call-from-thunk
@@ -1073,6 +1092,11 @@
   (pk-meta compile-fork (list:pk-compile-fork-from-op
                           pk-assign-compiler)))
 
+(pk-dynenv-set-meta pk-replenv* 'meta
+  (pk-meta result         idfn
+           compile-fork   (list:pk-compile-fork-from-op
+                            pk-demeta-compiler)))
+
 (pk-dynenv-set-meta pk-replenv* ':
   (pk-meta result        (fn args1
                            (fn args2
@@ -1087,10 +1111,12 @@
            compile-fork  (list:pk-compile-fork-from-op
                            pk-infix-call-compiler)))
 
-(pk-dynenv-set-meta pk-replenv* 'meta
-  (pk-meta result         idfn
-           compile-fork   (list:pk-compile-fork-from-op
-                            pk-demeta-compiler)))
+; NOTE: Jarc 17 considers (string '|'|) to be "|'|", and Rainbow
+; considers it to be "||" because it parses '|'| as two expressions.
+(pk-dynenv-set-meta pk-replenv* (sym "'")
+  (pk-meta result        (fn args [apply _ args])
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-infix-inverted-call-compiler)))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is
