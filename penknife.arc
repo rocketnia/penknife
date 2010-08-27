@@ -329,12 +329,8 @@
 ;                         containing a Penknife value which, when
 ;                         called with no arguments using 'pk-call,
 ;                         will imperatively perform some additional
-;                         action which is meant to be done after
-;                         normal evaluation and before the result is
-;                         written to the REPL.
-;   rep._!echoless:       Any value, used as a boolean to indicate
-;                         (unless it's nil) that the result should not
-;                         be written to the REPL.
+;                         action which is meant to be done instead of
+;                         writing the result to the REPL.
 ;   rep._!quit:           If present, a singleton proper list
 ;                         indicating that the Penknife REPL session
 ;                         should exit and return the contained value
@@ -1089,8 +1085,8 @@
 
 (pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
                                    (list:fn ((o code 'goodbye))
-                                     (pk-meta echoless  t
-                                              quit      list.code))))
+                                     (pk-meta action  (list:fn ())
+                                              quit    list.code))))
 
 (pk-dynenv-set-meta pk-replenv* 'compose
   (pk-meta result        pk-compose
@@ -1103,10 +1099,8 @@
                            pk-stringquote-compiler)))
 
 (pk-dynenv-set-meta pk-replenv* 'help
-  (pk-meta echoless  t
-           action    (list:fn ()
-                       (prn "To exit Penknife, use \"[drop]\", "
-                            "without the quotes."))))
+  (pk-meta action (list:thunk:prn "To exit Penknife, use \"[drop]\", "
+                                  "without the quotes.")))
 
 (pk-dynenv-set-meta pk-replenv* '=
   (pk-meta compile-fork (list:pk-compile-fork-from-op
@@ -1172,11 +1166,9 @@
       (aif (start-word&finish-bracket-word comment-ignorer.str)
         (let meta (pk-eval-tl it pk-replenv*)
           (only.err rep.meta!error)
-          (awhen rep.meta!action
-            (pk-call car.it))
-          (unless rep.meta!echoless
-            (write rep.meta!result)
-            (prn))
+          (aif rep.meta!action
+            (pk-call car.it)
+            (do (write rep.meta!result) (prn)))
           (whenlet (quit) rep.meta!quit
             list.quit))
         list!goodbye))))
