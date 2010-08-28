@@ -980,8 +980,11 @@
                     throw.t))
           (pr "pk> ")]))
 
-; NOTE: Rainbow doesn't like [].
-(def pkload (env filename)
+(def pkdo (env str)
   ; Don't display any results, raise all errors, and don't show any
   ; prompts.
-  (w/infile str filename (pktl env str [do] err [do])))
+  (pktl env str [do] err [do]))
+
+; NOTE: Rainbow doesn't like [].
+(def pkload (env filename)
+  (w/infile str filename (pkdo env str)))
