@@ -43,7 +43,7 @@
 ; attempted.
 
 
-; Definition listing:
+; Declaration listing:
 ;
 ; (pk-staticenv-shadow-list self vars)  ; rulebook
 ; (pk-dynenv-shadow-sobj self binds)    ; rulebook
@@ -57,8 +57,13 @@
 ; (pk-optimize-expr self dynenv local-lex env-lex)       ; rulebook
 ; (pk-optimize-expr-meta self dynenv local-lex env-lex)  ; rulebook
 ;
+; < some external rules using 'def-pk-eval >
+;
 ; (pk-thin-fn-rest-compiler compiled-op body staticenv)
 ; (pk-thin-fn-compiler compiled-op body staticenv)
+;
+; Penknife  [tf [args$&] body&]
+; Penknife  [tf* [args$&] restarg$ body&]
 ;
 ;
 ; Type listing:

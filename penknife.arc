@@ -72,7 +72,7 @@
 ; [7] http://github.com/rocketnia/lathe
 
 
-; Definition listing:
+; Declaration listing:
 ;
 ; ut   ; namespace of Lathe's utils.arc
 ; mr   ; namespace of Lathe's multival/multirule.arc
@@ -105,9 +105,6 @@
 ; (o+binary self other)                           ; rulebook
 ; (o+ first . rest)
 ;
-; (soup->string soup)
-; (sip->string self)   ; rulebook
-;
 ; (pk-fork-to-get self)                       ; rulebook
 ; (pk-fork-to-set self new-value)             ; rulebook
 ; (pk-fork-to-meta self)                      ; rulebook
@@ -120,13 +117,6 @@
 ; (pk-compile-fork-from-op op-compiler)
 ;
 ; (pk-function-call-compiler compiled-op body staticenv)
-; (pk-stringquote-compiler compiled-op body staticenv)
-; (pk-compose-compiler compiled-op body staticenv)
-; (pk-assign-compiler compiled-op body staticenv)
-; (pk-demeta-compiler compiled-op body staticenv)
-; (pk-infix-call-compiler compiled-op body staticenv)
-; (pk-infix-inverted-call-compiler compiled-op body staticenv)
-; (pk-generic-infix-compiler base-compiler)
 ;
 ; (pk-meta . args)                      ; macro
 ; (pk-demeta meta)
@@ -165,12 +155,12 @@
 ; (pk-eval-meta self dynenv)      ; rulebook
 ; (pk-eval-tl self dynenv)        ; rulebook
 ;
-; (pk-compose . args)
-; pk-replenv*                       ; value of type 'pk-ad-hoc-env
+; pk-replenv*  ; value of type 'pk-ad-hoc-env
 ;
 ; (error-message error)
 ; (pktl env str act-on report-error prompt)
 ; (pkrepl (o str (errsafe:stdin)))
+; (pkdo env str)
 ; (pkload env filename)
 ;
 ;
@@ -295,18 +285,6 @@
 ;                uncompiled body), and a static environment and
 ;                returns a 'pk-compile-fork value representing the
 ;                compiled expression.
-;
-; pk-sip-compose
-;   rep: A list which supports the following fields:
-;   rep._.0:  A nonempty proper list of 'pk-soup values representing
-;             uncompiled operator expressions to apply in reverse
-;             order, in series, to the body. If there is only one
-;             operator, it will be applied to the body directly.
-;             Otherwise, the first operator will be applied to a
-;             new 'pk-sip-compose value containing the rest of the
-;             composition information.
-;   rep._.1:  A 'pk-soup value representing the uncompiled body to
-;             apply the operators to.
 ;
 ; pk-ad-hoc-binding
 ;   rep: A list which supports getting and setting the following
@@ -651,21 +629,6 @@
   (ut.foldl o+binary first rest))
 
 
-(def soup->string (soup)
-  ; NOTE: On Rainbow, (apply string '("something")) and
-  ; (string '("something")) don't have the same result.
-  (apply string (map slurp->string rep.soup)))
-
-(rc:ontype slurp->string () string string
-  self)
-
-(rc:ontype slurp->string () rc.list list
-  (map sip->string self))
-
-(rc:ontype sip->string () pk-bracketed-soup pk-bracketed-soup
-  (+ "[" (soup->string rep.self.0) "]"))
-
-
 (rc:ontype pk-fork-to-get () pk-compile-fork pk-compile-fork
   (pk-call rep.self!get))
 
@@ -726,115 +689,6 @@
       (map [pk-fork-to-get:pk-soup-compile _ staticenv]
            otokens.body))
     pk-staticenv-default-op-compiler.staticenv))
-
-(def pk-stringquote-compiler (compiled-op body staticenv)
-  (pk-compile-literal-from-thunk (fn () soup->string.body) staticenv))
-
-; We define 'compose such that [[compose a b c] d e] is compiled based
-; on the compiler of "a" and a body of this format:
-;
-;   (annotate 'pk-soup
-;     (list:list:annotate 'pk-sip-compose
-;       (list (list (annotate 'pk-soup (list "b"))
-;                   (annotate 'pk-soup (list "c")))
-;             (annotate 'pk-soup (list " d e")))))))
-;
-(def pk-compose-compiler (compiled-op body staticenv)
-  (withs (token-args           otokens.body
-          compile-first-arg    (memo:thunk:if token-args
-                                 (pk-soup-compile
-                                   car.token-args staticenv)
-                                 (pk-compile-literal-from-thunk
-                                   thunk.idfn staticenv)))
-    (pk-compile-call-from-thunk
-      (thunk:map pk-fork-to-get
-        (cons compiled-op
-          (when token-args
-            (cons call.compile-first-arg
-              (map [pk-soup-compile _ staticenv] cdr.token-args)))))
-      (fn (compiled-op2 body2 staticenv2)
-        (let compiled-composed-op call.compile-first-arg
-          (pk-fork-to-op compiled-composed-op
-                         (case cdr.token-args nil body2
-                           (annotate 'pk-soup
-                             (list:list:annotate 'pk-sip-compose
-                               (list cdr.token-args body2))))
-                         staticenv2))))))
-
-(def pk-assign-compiler (compiled-op body staticenv)
-  (let token-args otokens.body
-    (unless (is len.token-args 2)
-      (err "An assignment body didn't have exactly two words in it."))
-    (pk-compile-leaf-from-thunk staticenv
-      (thunk:let (var val) token-args
-        (pk-fork-to-set
-          (pk-soup-compile var staticenv)
-          (pk-fork-to-get:pk-soup-compile val staticenv))))))
-
-(def pk-demeta-compiler (compiled-op body staticenv)
-  (let arg otokens.body
-    (unless single.arg
-      (err "A meta body didn't have exactly one word in it."))
-    (zap car arg)
-    (with (getter (memo:thunk:annotate 'pk-lambdacalc-demeta
-                    (list:pk-fork-to-meta:pk-soup-compile
-                      arg staticenv))
-           var    (memo:thunk:if pk-soup-identifier.arg
-                    (sym:car:rep arg)
-                    (err:+ "The meta of a non-identifier can't be "
-                           "set.")))
-      (annotate 'pk-compile-fork
-        (obj get   getter
-             set   [annotate 'pk-lambdacalc-set-meta
-                     (list call.var _)]
-             meta  getter
-             op    pk-staticenv-default-op-compiler.staticenv)))))
-
-(def pk-infix-call-compiler (compiled-op body staticenv)
-  (let token-args otokens.body
-    (unless single.token-args
-      (err "A \".\" body didn't have exactly one word in it."))
-    (pk-soup-compile car.token-args staticenv)))
-
-(def pk-infix-inverted-call-compiler (compiled-op body staticenv)
-  (let as-default (memo:thunk:pk-call
-                    pk-staticenv-default-op-compiler.staticenv
-                    compiled-op body staticenv)
-    (annotate 'pk-compile-fork
-      (obj get   (memo:thunk:pk-fork-to-get call.as-default)
-           set   [err "A once-applied \"'\" form can't be set."]
-           meta  (memo:thunk:pk-fork-to-meta call.as-default)
-           op    (fn (compiled-op2 body2 staticenv2)
-                   (let token-args otokens.body2
-                     (unless single.token-args
-                       (err:+ "The second body of a \"'\" didn't "
-                              "have exactly one word in it."))
-                     (let compiled-inner-op
-                            (pk-soup-compile car.token-args staticenv)
-                       (pk-fork-to-op
-                         compiled-inner-op body staticenv))))))))
-
-(def pk-generic-infix-compiler (base-compiler)
-  (fn (compiled-op1 body1 staticenv1)
-    (pk-compile-call-from-thunk
-      (thunk:map pk-fork-to-get
-        (cons compiled-op1
-          (map [pk-soup-compile _ staticenv1] otokens.body1)))
-      (fn (compiled-op2 body2 staticenv2)
-        (let compile-op
-               (memo:thunk:pk-fork-to-op-method:do.base-compiler
-                 compiled-op1
-                 (let s (annotate 'pk-soup
-                          (list:list:annotate 'pk-soup-whitec nil))
-                   (o+ body1 s body2))
-                 staticenv2)
-          (pk-compile-call-from-thunk
-            (thunk:map pk-fork-to-get
-              (cons compiled-op2
-                (map [pk-soup-compile _ staticenv2] otokens.body2)))
-            (fn (compiled-op3 body3 staticenv3)
-              (pk-call call.compile-op
-                compiled-op3 body3 staticenv3))))))))
 
 
 (mac pk-meta args
@@ -983,20 +837,6 @@
     (pk-fork-to-op (pk-soup-compile op staticenv) rest staticenv)
     (do.fail "The syntax was an empty pair of brackets.")))
 
-(rc:ontype pk-sip-compile (staticenv) pk-sip-compose pk-sip-compose
-  (let (ops body) rep.self
-    (iflet (first . rest) ops
-      (let compiled-op (pk-soup-compile first staticenv)
-        (pk-fork-to-op compiled-op
-                       (if rest
-                         (annotate 'pk-soup
-                           (list:list:annotate 'pk-sip-compose
-                             (list rest body)))
-                         body)
-                       staticenv))
-      (do.fail:+ "The syntax was a composition form with nothing "
-                 "composed."))))
-
 
 (rc:ontype pk-call args fn fn
   (apply self args))
@@ -1086,74 +926,10 @@
   (pk-eval-meta (pk-soup-compile-tl self env) env))
 
 
-(def pk-compose args
-  (if no.args idfn
-    (let (last . rest) rev.args
-      (zap rev rest)
-      (fn args
-        (ut.foldr pk-call (apply pk-call last args) rest)))))
-
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
-;
-; TODO: Put more functionality in here.
-;
+
 (= pk-replenv* (annotate 'pk-ad-hoc-env (table)))
-
-(pk-dynenv-set pk-replenv* 'demo (thunk:prn "This is a demo."))
-
-(pk-dynenv-set pk-replenv* '+ +)
-
-(pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
-                                   (list:fn ((o code 'goodbye))
-                                     (pk-meta action  (list:fn ())
-                                              quit    list.code))))
-
-(pk-dynenv-set-meta pk-replenv* 'compose
-  (pk-meta result        pk-compose
-           compile-fork  (list:pk-compile-fork-from-op
-                           pk-compose-compiler)))
-
-(pk-dynenv-set-meta pk-replenv* 'q
-  (pk-meta result        idfn
-           compile-fork  (list:pk-compile-fork-from-op
-                           pk-stringquote-compiler)))
-
-(pk-dynenv-set-meta pk-replenv* 'help
-  (pk-meta action (list:thunk:prn "To exit Penknife, use \"[drop]\", "
-                                  "without the quotes.")))
-
-(pk-dynenv-set-meta pk-replenv* '=
-  (pk-meta compile-fork (list:pk-compile-fork-from-op
-                          pk-assign-compiler)))
-
-(pk-dynenv-set-meta pk-replenv* 'meta
-  (pk-meta result         idfn
-           compile-fork   (list:pk-compile-fork-from-op
-                            pk-demeta-compiler)))
-
-(pk-dynenv-set pk-replenv* 'command [annotate 'pk-fn-meta list._])
-
-(pk-dynenv-set-meta pk-replenv* ':
-  (pk-meta result        (fn args1
-                           (fn args2
-                             (apply pk-compose (join args1 args2))))
-           compile-fork  (list:pk-compile-fork-from-op
-                           (pk-generic-infix-compiler
-                             pk-compose-compiler))))
-
-; NOTE: Both Rainbow *and* Jarc consider (string '|.|) to be "|.|".
-(pk-dynenv-set-meta pk-replenv* (sym ".")
-  (pk-meta result        idfn
-           compile-fork  (list:pk-compile-fork-from-op
-                           pk-infix-call-compiler)))
-
-; NOTE: Jarc 17 considers (string '|'|) to be "|'|", and Rainbow
-; considers it to be "||" because it parses '|'| as two expressions.
-(pk-dynenv-set-meta pk-replenv* (sym "'")
-  (pk-meta result        (fn args [apply _ args])
-           compile-fork  (list:pk-compile-fork-from-op
-                           pk-infix-inverted-call-compiler)))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is

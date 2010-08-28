@@ -1,4 +1,4 @@
-; util.pk
+; pk-util.pk
 
 
 ; Copyright (c) 2010 Ross Angle
@@ -30,11 +30,17 @@
 
 ; This is a plugin for Penknife. To use it, you must first load
 ; penknife.arc, pk-thin-fn.arc, and pk-hefty-fn.arc, in that order.
-; Then, load this using (pkload pk-replenv* "your/path/to/util.pk").
+; Then load this using (pkload pk-replenv* "your/path/to/pk-util.pk").
 ;
 ; This installs a couple of utilities in the environment it's loaded
 ; with (which, in the instructions above, is the REPL environment).
 
 
-[= idfn [hf [x] x]]
-[= list [hf* [] elems elems]]
+; Declaration listing:
+;
+; [idfn result]
+; [list elements&]
+
+
+[= idfn [hf [result] result]]
+[= list [hf* [] elements elements]]

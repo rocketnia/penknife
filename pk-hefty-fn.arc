@@ -42,10 +42,19 @@
 ; even more efficient form.
 
 
-; Definition listing:
+; Declaration listing:
+;
+; (pk-call self . args)  ; external rule
+;
+; < some external rules using 'def-pk-eval >
+; (pk-captures-env self)                               ; external rule
+; < some external rules using 'def-pk-optimize-expr >
 ;
 ; (pk-hefty-fn-rest-compiler compiled-op body staticenv)
 ; (pk-hefty-fn-compiler compiled-op body staticenv)
+;
+; Penknife  [hf [args$&] body&]
+; Penknife  [hf* [args$&] restarg$ body&]
 ;
 ;
 ; Type listing:
