@@ -134,7 +134,7 @@
 ;
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
-; (pk-staticenv-read-compile-tl self str)       ; rulebook
+; (pk-staticenv-read-eval-tl self str)          ; rulebook
 ; (pk-staticenv-literal self name)              ; rulebook
 ; (pk-dynenv-ensure-binding self varname)       ; rulebook
 ; (pk-dynenv-get-binding self varname)          ; rulebook
@@ -207,6 +207,7 @@
 ;   rep: A singleton list containing the value for this expression to
 ;        evaluate to.
 ;
+; TODO: See if this is still useful.
 ; pk-lambdacalc-literal-meta
 ;   rep: A singleton list containing the metadata for this expression
 ;        to evaluate to.
@@ -777,12 +778,10 @@
   pk-function-call-compiler)
 
 ; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
-(rc:ontype pk-staticenv-read-compile-tl (str)
-             pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-staticenv-read-eval-tl (str) pk-ad-hoc-env pk-ad-hoc-env
   (aif (start-word&finish-bracket-word comment-ignorer.str)
-    (pk-soup-compile-tl it self)
-    (annotate 'pk-lambdacalc-literal-meta
-      (list:pk-meta action (list:fn ()) quit list!goodbye))))
+    (pk-eval-tl it self)
+    (pk-meta action (list:fn ()) quit list!goodbye)))
 
 ; TODO: Allow literal syntax customization among 'pk-ad-hoc-env
 ; values.
@@ -995,18 +994,26 @@
 
 (def pktl (env str act-on report-error prompt)
   (zap newline-normalizer str)
+  
   ; NOTE: Jarc's 'on-err suppresses escape continuations, so
-  ; 'catch:until:do and 'throw would fail here.
-  (car:catch:until:only.throw:do
-    prompt.str                    ; Wait for more input.
-    (let expr (pk-staticenv-read-compile-tl env str)
-      (on-err [do (do.report-error error-message._) nil]
-        (thunk:let meta (pk-eval-meta expr env)
-          (iflet (action) rep.meta!action
-            pk-call.action
-            do.act-on.meta)
-          (whenlet (quit) rep.meta!quit
-            list.quit))))))
+  ; 'catch:until:on-err and 'throw would fail here.
+  ;
+  ; NOTE: If 'pk-staticenv-read-eval-tl raises an error while reading,
+  ; rather than while compiling or evaluating, this could loop
+  ; infinitely. We plan to let the environment support command syntax
+  ; we can't predict, such as multiple-word commands or commands with
+  ; mismatched brackets, so there isn't an obvious way to separate the
+  ; reading and compiling phases.
+  ;
+  (car:catch:until:only.throw:on-err
+    [do (do.report-error error-message._) nil]
+    (fn () do.prompt.str                        ; Wait for more input.
+           (let meta (pk-staticenv-read-eval-tl env str)
+             (iflet (action) rep.meta!action
+               pk-call.action
+               do.act-on.meta)
+             (whenlet (quit) rep.meta!quit
+               list.quit)))))
 
 ; NOTE: On Rainbow, (stdin), of all things, produces an error. When
 ; that happens, we go get it ourselves.
@@ -1015,8 +1022,9 @@
     (= str (jvm!rainbow-functions-IO-stdIn)))
   (pktl pk-replenv*
         str
-        [on-err [prn "Error writing: " error-message._]
-          (fn () (write pk-demeta._) (prn))]
+        [let val pk-demeta._
+          (on-err [prn "Error writing: " error-message._]
+            (fn () write.val (prn)))]
         [prn "Error: " _]
         ; Show the prompt unless there's a non-whitespace character
         ; ready.
