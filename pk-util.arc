@@ -56,9 +56,9 @@
 ;
 ; Declaration listing:
 ;
-; (soup->string soup)
-; (slurp->string self)                                  ; rulebook
-; (sip->string self)                                    ; rulebook
+; (soup->string-force soup)
+; (slurp->string-force self)                            ; rulebook
+; (sip->string-force self)                              ; rulebook
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; Penknife  q[string~]
 ; Penknife  [idfn.q result]
@@ -120,22 +120,23 @@
 ; TODO: Put more functionality in here.
 
 
-(def soup->string (soup)
+(def soup->string-force (soup)
   ; NOTE: On Rainbow, (apply string '("something")) and
   ; (string '("something")) don't have the same result.
-  (apply string (map slurp->string rep.soup)))
+  (apply string (map slurp->string-force rep.soup)))
 
-(rc:ontype slurp->string () string string
+(rc:ontype slurp->string-force () string string
   self)
 
-(rc:ontype slurp->string () rc.list list
-  (map sip->string self))
+(rc:ontype slurp->string-force () rc.list list
+  (map sip->string-force self))
 
-(rc:ontype sip->string () pk-bracketed-soup pk-bracketed-soup
-  (+ "[" (soup->string rep.self.0) "]"))
+(rc:ontype sip->string-force () pk-bracketed-soup pk-bracketed-soup
+  (+ "[" (soup->string-force rep.self.0) "]"))
 
 (def pk-stringquote-compiler (compiled-op body staticenv)
-  (pk-compile-literal-from-thunk (fn () soup->string.body) staticenv))
+  (pk-compile-literal-from-thunk
+    (fn () soup->string-force.body) staticenv))
 
 (pk-dynenv-set-meta pk-replenv* 'q
   (pk-meta result        idfn
@@ -169,9 +170,8 @@
         (let compiled-composed-op call.compile-first-arg
           (pk-fork-to-op compiled-composed-op
                          (case cdr.token-args nil body2
-                           (annotate 'pk-soup
-                             (list:list:annotate 'pk-sip-compose
-                               (list cdr.token-args body2))))
+                           (pk-soup-singleton:annotate 'pk-sip-compose
+                             (list cdr.token-args body2)))
                          staticenv2))))))
 
 (def pk-compose args
@@ -187,9 +187,8 @@
       (let compiled-op (pk-soup-compile first staticenv)
         (pk-fork-to-op compiled-op
                        (if rest
-                         (annotate 'pk-soup
-                           (list:list:annotate 'pk-sip-compose
-                             (list rest body)))
+                         (pk-soup-singleton:annotate 'pk-sip-compose
+                           (list rest body))
                          body)
                        staticenv))
       (do.fail:+ "The syntax was a composition form with nothing "
@@ -205,8 +204,8 @@
         (let compile-op
                (memo:thunk:pk-fork-to-op-method:do.base-compiler
                  compiled-op1
-                 (let s (annotate 'pk-soup
-                          (list:list:annotate 'pk-soup-whitec nil))
+                 (let s (pk-soup-singleton:annotate 'pk-soup-whitec
+                          nil)
                    (o+ body1 s body2))
                  staticenv2)
           (pk-compile-call-from-thunk
@@ -254,8 +253,7 @@
     (with (getter (memo:thunk:annotate 'pk-lambdacalc-demeta
                     (list:pk-fork-to-meta:pk-soup-compile
                       arg staticenv))
-           var    (memo:thunk:if pk-soup-identifier.arg
-                    (sym:car:rep arg)
+           var    (memo:thunk:car:or pk-soup-identifier.arg
                     (err:+ "The meta of a non-identifier can't be "
                            "set.")))
       (annotate 'pk-compile-fork

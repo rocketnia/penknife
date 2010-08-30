@@ -104,6 +104,11 @@
 ; (slurp+ self other)                             ; rulebook
 ; (o+binary self other)                           ; rulebook
 ; (o+ first . rest)
+; (soup->string soup)
+; (slurp->string self)                            ; rulebook
+; (soup->list soup)
+; (slurp->list self)                              ; rulebook
+; (pk-soup-singleton elem)
 ;
 ; (pk-fork-to-get self)                       ; rulebook
 ; (pk-fork-to-set self new-value)             ; rulebook
@@ -560,7 +565,8 @@
                     do.acc.after)))
     (map [annotate 'pk-soup rev._] (list self margin))))
 
-; This is used internally by oi!oempty and oi!olen>.
+; This is used internally by oi!oempty and oi!olen>, and we also use
+; it directly.
 (rc:ontype oi.olen< (number) pk-soup pk-soup
   (and (< 0 number)
        (catch:~each slurp rep.self
@@ -627,6 +633,36 @@
 
 (def o+ (first . rest)
   (ut.foldl o+binary first rest))
+
+(def soup->string (soup)
+  ; NOTE: On Rainbow, (apply string '("something")) and
+  ; (string '("something")) don't have the same result.
+  (catch:apply string (map [or slurp->string._ throw.nil] rep.soup)))
+
+(rc:ontype slurp->string () string string
+  self)
+
+(mr:rule slurp->string (self) default
+  nil)
+
+(oc:label-prefer-labels-last slurp->string-default-last
+  'slurp->string 'default)
+
+(def soup->list (soup)
+  (catch:mappend [car:or slurp->list._ throw.nil] rep.soup))
+
+(rc:ontype slurp->list () rc.list list
+  list.self)
+
+(mr:rule slurp->list (self) default
+  nil)
+
+(oc:label-prefer-labels-last slurp->list-default-last
+  'slurp->list 'default)
+
+; TODO: See how to make this aware of nonstandard kinds of slurps.
+(def pk-soup-singleton (elem)
+  (annotate 'pk-soup (list:.elem:case type.elem char string list)))
 
 
 (rc:ontype pk-fork-to-get () pk-compile-fork pk-compile-fork
@@ -778,32 +814,31 @@
 
 (def pk-string-identifier (x)
   (case type.x string
-    (or (all pk-alpha-id-char x) (all pk-infix-id-char x))))
+    (when (or (all pk-alpha-id-char x) (all pk-infix-id-char x))
+      (list sym.x))))
 
 (def pk-soup-identifier (x)
-  (case type.x pk-soup
-    (and (single rep.x) (pk-string-identifier rep.x.0))))
+  (case type.x pk-soup (only.pk-string-identifier soup->string.x)))
 
 (mr:rule pk-soup-compile-tl (soup staticenv) expression
   (pk-fork-to-meta:pk-soup-compile soup staticenv))
 
 (mr:rule pk-soup-compile (soup staticenv) one-sip
-  (zap rep soup)
-  (unless (and single.soup (single car.soup))
-    (do.fail "The word wasn't simply a single non-character."))
-  (pk-sip-compile caar.soup staticenv))
+  (iflet (sip) (and (oi.olen< soup 2)
+                    (no soup->string.soup)
+                    soup->list.soup)
+    (pk-sip-compile sip staticenv)
+    (do.fail "The word wasn't simply a single non-character.")))
 
 (mr:rule pk-soup-compile (soup staticenv) identifier
-  (unless pk-soup-identifier.soup
-    (do.fail "The word wasn't an identifier."))
-  (pk-staticenv-get-compile-fork staticenv (sym:car:rep soup)))
+  (iflet (name) pk-soup-identifier.soup
+    (pk-staticenv-get-compile-fork staticenv name)
+    (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-soup-compile (soup staticenv) nonnegative-integer
-  (zap rep soup)
-  (unless (and single.soup (isa car.soup 'string)
-            (all digit car.soup))
-    (do.fail "The word wasn't a nonnegative decimal integer."))
-  (pk-compile-literal-from-thunk (thunk:int car.soup) staticenv))
+  (iflet digits (check soup->string.soup [all digit _])
+    (pk-compile-literal-from-thunk (fn () int.digits) staticenv)
+    (do.fail "The word wasn't a nonnegative decimal integer.")))
 
 (mr:rule pk-soup-compile (soup staticenv) infix
   (iflet (left op right) (o-split-last-token soup
@@ -822,7 +857,7 @@
                 (and pk-soup-identifier.op (oi.olen> bodies 0)))
       (do.fail:+ "The word wasn't a series of bracketed bodies "
                  "preceded by a bracket form or an identifier."))
-    (zap car:rep bodies)
+    (zap soup->list bodies)
     (= op (if oi.oempty.op
             (pk-sip-compile pop.bodies staticenv)
             (pk-soup-compile op staticenv)))

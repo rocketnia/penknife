@@ -303,19 +303,21 @@
     (unless (<= 3 len.token-args)
       (err:+ "A thin-fn-rest body didn't have at least three words "
              "in it."))
-    (let (args rest . body) token-args
-      (unless (and (single rep.args)
-                   (single rep.args.0)
-                   (isa rep.args.0.0 'pk-bracketed-soup))
-        (err:+ "A thin-fn-rest parameter list wasn't a "
-               "'pk-bracketed-soup."))
-      (zap otokens:car:rep:caar:rep args)
-      (unless (all pk-soup-identifier (cons rest args))
-        (err "A thin-fn-rest parameter wasn't an identifier."))
+    (withs ((args rest . body) token-args
+            (args) (or (aand (oi.olen< rep.args 2)
+                             (check soup->list.args
+                               (andf single
+                                     rc.a-!pk-bracketed-soup:car)))
+                       (err:+ "A thin-fn-rest parameter list wasn't "
+                              "a 'pk-bracketed-soup."))
+            ident-ify [car:or pk-soup-identifier._
+                        (err:+ "A thin-fn-rest parameter wasn't an "
+                               "identifier.")])
+      (zap [map ident-ify (otokens rep._.0)] args)
+      (zap ident-ify rest)
       (pk-compile-leaf-from-thunk staticenv
         (thunk:let innerenv (pk-staticenv-shadow-list staticenv
-                              (cons (zap sym:car:rep rest)
-                                    (zap [map sym:car:rep _] args)))
+                              (cons rest args))
           (annotate 'pk-lambdacalc-thin-fn
             (list args list.rest
               (map [pk-fork-to-get:pk-soup-compile _ innerenv]
@@ -325,15 +327,17 @@
   (let token-args otokens.body
     (unless (<= 2 len.token-args)
       (err "A thin-fn body didn't have at least two words in it."))
-    (let (args . body)  token-args
-      (unless (and (single rep.args)
-                   (single rep.args.0)
-                   (isa rep.args.0.0 'pk-bracketed-soup))
-        (err "A thin-fn parameter list wasn't a 'pk-bracketed-soup."))
-      (zap otokens:car:rep:caar:rep args)
-      (unless (all pk-soup-identifier args)
-        (err "A thin-fn parameter wasn't an identifier."))
-      (zap [map sym:car:rep _] args)
+    (withs ((args . body) token-args
+            (args) (or (aand (oi.olen< rep.args 2)
+                             (check soup->list.args
+                               (andf single
+                                     rc.a-!pk-bracketed-soup:car)))
+                       (err:+ "A thin-fn parameter list wasn't a "
+                              "'pk-bracketed-soup."))
+            ident-ify [car:or pk-soup-identifier._
+                        (err:+ "A thin-fn parameter wasn't an "
+                               "identifier.")])
+      (zap [map ident-ify (otokens rep._.0)] args)
       (pk-compile-leaf-from-thunk staticenv
         (thunk:let innerenv (pk-staticenv-shadow-list staticenv args)
           (annotate 'pk-lambdacalc-thin-fn
