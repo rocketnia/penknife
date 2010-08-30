@@ -100,6 +100,7 @@
 ; Penknife  help                    ; command
 ; Penknife  idfn.help               ; returns nil
 ; Penknife  [[command func] args&]  ; command
+; Penknife  [apply func args]
 ;
 ;
 ; Type listing:
@@ -322,3 +323,6 @@
                                   "without the quotes.")))
 
 (pk-dynenv-set pk-replenv* 'command [annotate 'pk-fn-meta list._])
+
+(pk-dynenv-set pk-replenv* 'apply (fn args
+                                    (apply apply pk-call args)))

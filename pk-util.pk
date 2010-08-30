@@ -40,7 +40,17 @@
 ;
 ; [idfn result]
 ; [list elements&]
+; nil                           ; returns nil
+; [join lists&]
+; [[[` func] args-a&] args-b&]
 
 
 [= idfn [hf [result] result]]
 [= list [hf* [] elements elements]]
+[= nil list.]
+[= join [hf* [] lists [apply + nil lists]]]
+
+[= ` [hf* [] args-a
+       [hf [func]
+         [hf* [] args-b
+           [apply func [join args-a args-b]]]]]]
