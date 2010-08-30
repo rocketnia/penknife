@@ -299,8 +299,14 @@
 ;             this binding.
 ;
 ; pk-ad-hoc-env
-;   rep: A table mapping bound variable names to singleton proper
-;        lists containing their bindings.
+;   rep: A nullary function returning a table mapping bound variable
+;        names to singleton proper lists containing their bindings.
+;        The table returned is the same one each time, so that
+;        'pk-dynenv-ensure-binding can mutate new bindings onto it.
+;        The point of having this be a function, rather than just
+;        being the table itself, is so that Jarc 17 and Rainbow don't
+;        error out when trying to display an environment which has an
+;        element that refers back to the same environment.
 ;
 ; pk-fn-meta
 ;   rep: A singleton proper list containing a Penknife function which
@@ -781,12 +787,12 @@
 ; TODO: See if the name ought to be baked into the metadata this way.
 (rc:ontype pk-dynenv-ensure-binding (varname)
              pk-ad-hoc-env pk-ad-hoc-env
-  (car:or= rep.self.varname
+  (car:or= (.varname:rep.self)
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
       (+ "The variable \"" (or varname "nil") "\" is unbound."))))
 
 (rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
-  rep.self.varname)
+  (.varname:rep.self))
 
 (rc:ontype pk-dynenv-get (varname) pk-ad-hoc-env pk-ad-hoc-env
   (pk-binding-get:pk-dynenv-ensure-binding self varname))
@@ -964,7 +970,7 @@
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
 
-(= pk-replenv* (annotate 'pk-ad-hoc-env (table)))
+(= pk-replenv* (let rep (table) (annotate 'pk-ad-hoc-env thunk.rep)))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is

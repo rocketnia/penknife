@@ -80,14 +80,14 @@
 
 
 (rc:ontype pk-staticenv-shadow-list (vars) pk-ad-hoc-env pk-ad-hoc-env
-  (annotate 'pk-ad-hoc-env
-    (apply copy rep.self (mappend [list _ nil] vars))))
+  (let rep (apply copy (rep.self) (mappend [list _ nil] vars))
+    (annotate 'pk-ad-hoc-env thunk.rep)))
 
 (rc:ontype pk-dynenv-shadow-sobj (binds) pk-ad-hoc-env pk-ad-hoc-env
-  (annotate 'pk-ad-hoc-env
-    (apply copy rep.self
-      (mappend [list _.0 (list:pk-make-ad-hoc-binding-meta _.1.0)]
-               tablist.binds))))
+  (let rep (apply copy (rep.self)
+             (ut:mappendlet (k (v)) tablist.binds
+               (list k (list pk-make-ad-hoc-binding-meta.v))))
+    (annotate 'pk-ad-hoc-env thunk.rep)))
 
 
 ; Pick an unlikely-to-write name without being too obscure and without
