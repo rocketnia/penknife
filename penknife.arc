@@ -135,6 +135,7 @@
 ; (pk-staticenv-get-compile-fork self varname)  ; rulebook
 ; (pk-staticenv-default-op-compiler self)       ; rulebook
 ; (pk-staticenv-read-compile-tl self str)       ; rulebook
+; (pk-staticenv-literal self name)              ; rulebook
 ; (pk-dynenv-ensure-binding self varname)       ; rulebook
 ; (pk-dynenv-get-binding self varname)          ; rulebook
 ; (pk-dynenv-get self varname)                  ; rulebook
@@ -783,6 +784,13 @@
     (annotate 'pk-lambdacalc-literal-meta
       (list:pk-meta action (list:fn ()) quit list!goodbye))))
 
+; TODO: Allow literal syntax customization among 'pk-ad-hoc-env
+; values.
+(rc:ontype pk-staticenv-literal (name) pk-ad-hoc-env pk-ad-hoc-env
+  (zap [string:or _ "nil"] name)
+  (when (all digit name)
+    (list int.name)))
+
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
 (rc:ontype pk-dynenv-ensure-binding (varname)
@@ -812,11 +820,11 @@
 
 ; For efficiency, this assumes the argument is a character.
 (def pk-alpha-id-char (x)
-  (or letter.x (pos x "+-*/<=>") (< 255 int.x)))
+  (or alphadig.x (pos x "+-*/<=>") (< 255 int.x)))
 
 ; For efficiency, this assumes the argument is a character.
 (def pk-infix-id-char (x)
-  (~or (<= int.x 32) digit.x pk-alpha-id-char.x))
+  (~or pk-alpha-id-char.x (<= int.x 32)))
 
 (def pk-string-identifier (x)
   (case type.x string
@@ -838,13 +846,10 @@
 
 (mr:rule pk-soup-compile (soup staticenv) identifier
   (iflet (name) pk-soup-identifier.soup
-    (pk-staticenv-get-compile-fork staticenv name)
+    (iflet (literal) (pk-staticenv-literal staticenv name)
+      (pk-compile-literal-from-thunk thunk.literal staticenv)
+      (pk-staticenv-get-compile-fork staticenv name))
     (do.fail "The word wasn't an identifier.")))
-
-(mr:rule pk-soup-compile (soup staticenv) nonnegative-integer
-  (iflet digits (check soup->string.soup [all digit _])
-    (pk-compile-literal-from-thunk (fn () int.digits) staticenv)
-    (do.fail "The word wasn't a nonnegative decimal integer.")))
 
 (mr:rule pk-soup-compile (soup staticenv) infix
   (iflet (left op right) (o-split-last-token soup
