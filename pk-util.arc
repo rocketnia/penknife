@@ -62,6 +62,19 @@
 ; (pk-stringquote-compiler compiled-op body staticenv)
 ; Penknife  q[string~]
 ; Penknife  [idfn.q result]
+; (pk-drop-to-arc-compiler compiled-op body staticenv)
+; Penknife  arc[code~]
+; Penknife  arc         ; returns t or nil, indicating support
+; (pk-drop-to-plt-compiler compiled-op body staticenv)
+; Penknife  plt[code~]
+; Penknife  plt         ; returns t or nil, indicating support
+; (pk-eval-plt-compiler compiled-op body staticenv)
+; Penknife  eval-plt[code~]
+; Penknife  eval-plt         ; returns t or nil, indicating support
+; pk-jvm-js-engine*          ; nil or a javax.script.ScriptEngine
+; (pk-js-compiler compiled-op body staticenv)
+; Penknife  js[code~]
+; Penknife  js         ; returns t or nil, indicating support
 ;
 ; (pk-compose-compiler compiled-op body staticenv)
 ; (pk-compose . args)
@@ -130,7 +143,8 @@
   self)
 
 (rc:ontype slurp->string-force () rc.list list
-  (map sip->string-force self))
+  ; NOTE: On Rainbow, string:map doesn't work here.
+  (apply string (map sip->string-force self)))
 
 (rc:ontype sip->string-force () pk-bracketed-soup pk-bracketed-soup
   (+ "[" (soup->string-force rep.self.0) "]"))
@@ -143,6 +157,73 @@
   (pk-meta result        idfn
            compile-fork  (list:pk-compile-fork-from-op
                            pk-stringquote-compiler)))
+
+(def pk-drop-to-arc-compiler (compiled-op body staticenv)
+  (pk-compile-call-from-thunk
+    (thunk:list:annotate 'pk-lambdacalc-literal
+      (list:eval:read:+ "(fn () " soup->string-force.body ")"))
+    pk-staticenv-default-op-compiler.staticenv))
+
+(pk-dynenv-set-meta pk-replenv* 'arc
+  (pk-meta result        t
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-drop-to-arc-compiler)))
+
+(def pk-drop-to-plt-compiler (compiled-op body staticenv)
+  (pk-compile-call-from-thunk
+    (thunk:list:annotate 'pk-lambdacalc-literal
+      (list:if plt
+        (plt.eval:plt.read:instring:+
+          "(lambda () " soup->string-force.body ")")
+        (thunk:err:+ "Dropping to PLT Racket isn't supported on this "
+                     "platform.")))
+    pk-staticenv-default-op-compiler.staticenv))
+
+(pk-dynenv-set-meta pk-replenv* 'plt
+  (pk-meta result        (~no plt)    ; NOTE: Jarc dislikes ~~.
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-drop-to-plt-compiler)))
+
+(def pk-eval-plt-compiler (compiled-op body staticenv)
+  (pk-compile-call-from-thunk
+    (thunk:list:annotate 'pk-lambdacalc-literal
+      (list:if plt
+        (let exprs (readall soup->string-force.body)
+          (thunk:ut:ret result nil
+            (each expr exprs
+              wipe.result
+              (= result plt.eval.expr))))
+        (thunk:err:+ "Evaluating PLT Racket isn't supported on this "
+                     "platform.")))
+    pk-staticenv-default-op-compiler.staticenv))
+
+(pk-dynenv-set-meta pk-replenv* 'eval-plt
+  (pk-meta result        (~no plt)         ; NOTE: Jarc dislikes ~~.
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-eval-plt-compiler)))
+
+(= pk-jvm-js-engine*
+  (and jv.jclass!javax-script-ScriptEngineManager
+       (jvm!getEngineByName
+         (jvm!javax-script-ScriptEngineManager-new)
+         "JavaScript")))
+
+; TODO: See what to do about putting semicolons into JavaScript code,
+; considering that Penknife treats them as comment characters.
+(def pk-js-compiler (compiled-op body staticenv)
+  (pk-compile-call-from-thunk
+    (thunk:list:annotate 'pk-lambdacalc-literal
+      (list:if pk-jvm-js-engine*
+        (thunk:jvm!eval pk-jvm-js-engine* soup->string-force.body)
+        (thunk:err:+ "Evaluating JavaScript isn't supported on this "
+                     "platform.")))
+    pk-staticenv-default-op-compiler.staticenv))
+
+(pk-dynenv-set-meta pk-replenv* 'js
+  ; NOTE: Jarc dislikes ~~.
+  (pk-meta result        (~no pk-jvm-js-engine*)
+           compile-fork  (list:pk-compile-fork-from-op
+                           pk-js-compiler)))
 
 
 ; We define 'compose such that [[compose a b c] d e] is compiled based
