@@ -269,6 +269,16 @@
 ;        evaluated for its metadata so that that metadata can be
 ;        returned as the non-metadata result of this expression.
 ;
+; pk-lambdacalc-use-compile-fork
+;   rep: A list which supports the following fields:
+;   rep._.0:  A function to splice in as the 'compile-fork field of
+;             the metadata result. (See 'pk-ad-hoc-meta.) There is no
+;             way to remove the 'compile-fork field this way; this
+;             value is wrapped in a singleton list automatically.
+;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
+;             types, which will provide the majority of the metadata
+;             result.
+;
 ; pk-compile-fork
 ;   rep: A table which supports the following fields:
 ;   rep._!get:   A value which, when called using 'pk-call, accepts no
@@ -714,8 +724,10 @@
                         call.compile-op-and-body)
                  [annotate 'pk-lambdacalc-call
                    (list call.compile-set _)])
-         meta  (memo:thunk:annotate 'pk-lambdacalc-call-meta
-                 call.compile-op-and-body)
+         meta  (memo:thunk:annotate 'pk-lambdacalc-use-compile-fork
+                 (list pk-compile-fork-from-op.op-compiler
+                       (annotate 'pk-lambdacalc-call-meta
+                         call.compile-op-and-body)))
          op    op-compiler)))
 
 (def pk-compile-fork-from-op (op-compiler)
@@ -954,6 +966,18 @@
 
 (def-pk-eval pk-lambdacalc-demeta
   (pk-eval-meta car.self dynenv))
+
+(rc:ontype pk-eval (dynenv) pk-lambdacalc-use-compile-fork
+                            pk-lambdacalc-use-compile-fork
+  (pk-eval rep.self.1 dynenv))
+
+(rc:ontype pk-eval-meta (dynenv) pk-lambdacalc-use-compile-fork
+                                 pk-lambdacalc-use-compile-fork
+  ; TODO: Stop having this depend on every metadata object being a
+  ; 'pk-ad-hoc-meta.
+  (annotate 'pk-ad-hoc-meta
+    (copy (rep:pk-eval-meta rep.self.1 dynenv)
+      'compile-fork (list rep.self.0))))
 
 (rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
   (pk-eval pk-fork-to-get.self dynenv))

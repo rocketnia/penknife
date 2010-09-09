@@ -143,6 +143,10 @@
              pk-lambdacalc-demeta pk-lambdacalc-demeta
   nil)
 
+(rc:ontype pk-captures-env () pk-lambdacalc-use-compile-fork
+                              pk-lambdacalc-use-compile-fork
+  (pk-captures-env rep.self.1))
+
 (rc:ontype pk-captures-env ()
              pk-lambdacalc-thin-fn pk-lambdacalc-thin-fn
   (some pk-captures-env rep.self.2))
@@ -241,6 +245,21 @@
 
 (def-pk-optimize-expr pk-lambdacalc-demeta
   (pk-optimize-expr-meta car.self dynenv local-lex env-lex))
+
+(rc:ontype pk-optimize-expr (dynenv local-lex env-lex)
+             pk-lambdacalc-use-compile-fork
+             pk-lambdacalc-use-compile-fork
+  (pk-optimize-expr rep.self.1 dynenv local-lex env-lex))
+
+(rc:ontype pk-optimize-expr-meta (dynenv local-lex env-lex)
+             pk-lambdacalc-use-compile-fork
+             pk-lambdacalc-use-compile-fork
+  ; TODO: Stop having this depend on every metadata object being a
+  ; 'pk-ad-hoc-meta.
+  `(annotate 'pk-ad-hoc-meta
+     (copy (rep ,(pk-optimize-expr-meta
+                   rep.self.1 dynenv local-lex env-lex))
+       'compile-fork (list (',(let fork rep.self.0 thunk.fork))))))
 
 (def-pk-optimize-expr pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
