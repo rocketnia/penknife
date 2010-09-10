@@ -29,9 +29,7 @@
 
 
 ; This is a plugin for Penknife. To use it, load it after you load
-; penknife.arc. It also installs some rules that only make a
-; difference if pk-thin-fn.arc is loaded, but even if it is loaded,
-; what order that file and this file are loaded in.
+; penknife.arc.
 ;
 ; This installs several utilities in 'pk-replenv*.
 
@@ -78,13 +76,8 @@
 ; Penknife  js[code~]
 ; Penknife  js         ; returns t or nil, indicating support
 ;
-; (pk-fork-let-dynenv dynenv fork)
 ; (pk-compose-compiler compiled-op body staticenv)
 ; (pk-compose . args)
-; (pk-eval self staticenv)                           ; external rule
-; (pk-eval-meta self staticenv)                      ; external rule
-; (pk-captures-env self)                             ; external rule
-; (pk-optimize-expr self dynenv local-lex env-lex)   ; external rule
 ; (pk-sip-compile self staticenv)                    ; external rule
 ; (pk-generic-infix-compiler base-compiler)
 ; Penknife  [compose ops& op][body~]                 ; syntax
@@ -125,12 +118,6 @@
 ;
 ; Type listing:
 ;
-; pk-lambdacalc-let-dynenv
-;   rep: A list which supports the following fields:
-;   rep._.0:  A dynamic environment.
-;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
-;             types, to be evaluated in that environment.
-;
 ; pk-sip-compose
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A nonempty proper list of 'pk-soup values representing
@@ -142,13 +129,6 @@
 ;             composition information.
 ;   rep._.1:  A 'pk-soup value representing the uncompiled body to
 ;             apply the operators to.
-;
-; pk-sip-let-envs
-;   rep: A list which supports the following fields:
-;   rep._.0:  An environment.
-;   rep._.1:  A 'pk-soup value representing syntax to compile in that
-;             environment (as a static environment) and later to
-;             evaluate in that environment (as a dynamic environment).
 
 
 ; TODO: Put more functionality in here.
@@ -246,18 +226,6 @@
                            pk-js-compiler)))
 
 
-(def pk-fork-let-dynenv (dynenv fork)
-  (annotate 'pk-compile-fork
-    (obj get   (memo:thunk:annotate 'pk-lambdacalc-let-dynenv
-                 (list dynenv pk-fork-to-get.fork))
-         ; TODO: See if this 'set branch will ever be needed. It isn't
-         ; needed yet.
-         set   [err:+ "A 'pk-fork-let-dynenv compile fork can't be "
-                      "forked into a setter compiler."]
-         meta  (memo:thunk:annotate 'pk-lambdacalc-let-dynenv
-                 (list dynenv pk-fork-to-get.fork))
-         op    pk-fork-to-op-method.fork)))
-
 ; We define 'compose such that [[compose a b c] d e] is compiled based
 ; on the compiler of "a" and a body of this format:
 ;
@@ -270,9 +238,8 @@
 (def pk-compose-compiler (compiled-op body staticenv)
   (withs (token-args           otokens.body
           compile-first-arg    (memo:thunk:if token-args
-                                 (pk-fork-let-dynenv staticenv
-                                   (pk-soup-compile
-                                     car.token-args staticenv))
+                                 (pk-soup-compile
+                                   car.token-args staticenv)
                                  (pk-compile-literal-from-thunk
                                    thunk.idfn staticenv)))
     (pk-compile-call-from-thunk
@@ -280,22 +247,14 @@
         (cons compiled-op
           (when token-args
             (cons call.compile-first-arg
-              ; TODO: See if this 'pk-fork-let-dynenv call is needed.
-              ; It's here for consistency, so that both the arguments
-              ; and the operator are wrapped.
-              (map [pk-fork-let-dynenv staticenv
-                     (pk-soup-compile _ staticenv)]
-                   cdr.token-args)))))
+              (map [pk-soup-compile _ staticenv] cdr.token-args)))))
       (fn (compiled-op2 body2 staticenv2)
-        (pk-fork-to-op call.compile-first-arg
-                       (case cdr.token-args nil body2
-                         (pk-soup-singleton:annotate 'pk-sip-compose
-                           (list (map [pk-soup-singleton:annotate
-                                        'pk-sip-let-envs
-                                        (list staticenv _)]
-                                      cdr.token-args)
-                                 body2)))
-                       staticenv2)))))
+        (let compiled-composed-op call.compile-first-arg
+          (pk-fork-to-op compiled-composed-op
+                         (case cdr.token-args nil body2
+                           (pk-soup-singleton:annotate 'pk-sip-compose
+                             (list cdr.token-args body2)))
+                         staticenv2))))))
 
 (def pk-compose args
   (if no.args idfn
@@ -317,43 +276,8 @@
       (do.fail:+ "The syntax was a composition form with nothing "
                  "composed."))))
 
-(rc:ontype pk-eval (dynenv)
-             pk-lambdacalc-let-dynenv pk-lambdacalc-let-dynenv
-  (pk-eval rep.self.1 rep.self.0))
-
-(rc:ontype pk-eval-meta (dynenv)
-             pk-lambdacalc-let-dynenv pk-lambdacalc-let-dynenv
-  (pk-eval-meta rep.self.1 rep.self.0))
-
-(rc:ontype pk-captures-env ()
-             pk-lambdacalc-let-dynenv pk-lambdacalc-let-dynenv
-  nil)
-
-(rc:ontype pk-optimize-expr (dynenv local-lex env-lex)
-             pk-lambdacalc-let-dynenv pk-lambdacalc-let-dynenv
-  (let (dynenv expr) rep.self
-    (let optimized (pk-optimize-expr expr dynenv nil nil)
-      (if pk-captures-env.expr
-        `(let _ (',thunk.dynenv) ,optimized)
-        optimized))))
-
-(rc:ontype pk-optimize-expr-meta (dynenv local-lex env-lex)
-             pk-lambdacalc-let-dynenv pk-lambdacalc-let-dynenv
-  (let (dynenv expr) rep.self
-    (let optimized (pk-optimize-expr-meta expr dynenv nil nil)
-      (if pk-captures-env.expr
-        `(let _ (',thunk.dynenv) ,optimized)
-        optimized))))
-
-(rc:ontype pk-sip-compile (staticenv) pk-sip-let-envs pk-sip-let-envs
-  (let (env expr) rep.self
-    (pk-fork-let-dynenv env (pk-soup-compile expr env))))
-
 (def pk-generic-infix-compiler (base-compiler)
   (fn (compiled-op1 body1 staticenv1)
-    ; TODO: Wrap 'body1 in a slurp that associates it with its static
-    ; environment. That way, [= foo'meta :[bar]'meta] can work even if
-    ; foo is used from a dynamic environment that doesn't include bar.
     (pk-compile-call-from-thunk
       (thunk:map pk-fork-to-get
         (cons compiled-op1
@@ -441,9 +365,6 @@
 
 
 (def pk-infix-inverted-call-compiler (compiled-op body staticenv)
-  ; TODO: Wrap 'body in a slurp that associates it with its static
-  ; environment. That way, [= foo'meta '[bar]'meta] can work even if
-  ; foo is used from a dynamic environment that doesn't include bar.
   (let as-default (memo:thunk:pk-call
                     pk-staticenv-default-op-compiler.staticenv
                     compiled-op body staticenv)
