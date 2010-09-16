@@ -85,17 +85,24 @@
 ; (pk-captures-hyperenv self)                 ; external rule
 ; < some external rules using 'def-pk-optimize-expr >
 ; pk-qqmeta*                           ; value of type 'pk-ad-hoc-meta
-; (pk-mc-rest-compiler-for qq-sym build-fn)
-; (pk-mc-compiler-for qq-sym build-fn)
+; (pk-mc-rest-compiler-for build-fn)
+; (pk-mc-compiler-for build-fn)
 ;
-; Penknife  [tm [args$&] body&]
-; Penknife  [tm* [args$&] restarg$ body&]
-; Penknife  [hm [args$&] body&]
-; Penknife  [hm* [args$&] restarg$ body&]
+; Penknife  [tm qq$ [args$&] body&]
+; Penknife  [tm* qq$ [args$&] rest$ body&]
+; Penknife  [hm qq$ [args$&] body&]
+; Penknife  [hm* qq$ [args$&] rest$ body&]
 ; Penknife  [wrap-op op]
 ;
 ;
 ; Type listing:
+;
+; pk-attached-soup
+;   rep: A list which supports the following fields:
+;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.1:  A hyperenvironment containing global static environments
+;             to use when compiling this soup.
+;   rep._.2:  A 'pk-soup value.
 ;
 ; pk-lambdacalc-qq
 ;   rep: A list which supports the following fields:
@@ -307,8 +314,12 @@
           (err "The result of a macro wasn't a 'pk-attached-soup."))
         (let (result-lexid result-hyperenv result-soup)
                rep.func-result
+          (zap otokens result-soup)
+          (unless single.result-soup
+            (err:+ "The result of a macro didn't contain exactly one "
+                   "word."))
           (pk-attach-op.result-hyperenv:pk-soup-compile
-            result-soup
+            car.result-soup
             result-lexid
             (pk-hyperenv-overlap
               result-hyperenv static-hyperenv)))))))
@@ -326,110 +337,94 @@
 
 (= pk-qqmeta* pk-wrap-op.pk-qq-compiler)
 
-(def pk-mc-rest-compiler-for (qq-sym build-fn)
+(def pk-mc-rest-compiler-for (build-fn)
   (fn (compiled-op body lexid static-hyperenv)
     (let token-args otokens.body
-      (unless (<= 3 len.token-args)
-        (err:+ "A thin-mc-rest body didn't have at least three words "
-               "in it."))
-      (withs ((args rest . body) token-args
-              (args) (or (aand (oi.olen< rep.args 2)
-                               (check soup->list.args
-                                 (andf single
-                                       rc.a-!pk-bracketed-soup:car)))
-                         (err:+ "A thin-mc-rest parameter list "
-                                "wasn't a 'pk-bracketed-soup."))
+      (unless (<= 4 len.token-args)
+        (err "A mc-rest body didn't have at least four words in it."))
+      (withs ((qq args rest . body) token-args
               argenvs (pk-make-hyperenv)
-              ident-ify
-                [iflet (hyped-varname env)
-                         (pk-soup-identifier-with-env
-                           _ lexid (pk-hyperenv-get-global
-                                     static-hyperenv lexid))
-                  (do (pk-hyperenv-shove argenvs
-                        (pk-make-hyperenv
-                          pk-hyped-sym-lexid.hyped-varname env)
-                        (+ "Two mc-rest parameters had conflicting "
-                           "lexid meanings."))
-                      hyped-varname)
-                  (err "A mc-rest parameter wasn't an identifier.")]
-              qq-hyped-sym (annotate 'pk-hyped-sym
-                             (list lexid qq-sym)))
-        (zap [map ident-ify (otokens rep._.0)] args)
-        (zap ident-ify rest)
+              shove [iflet (hyped-varname env) _
+                      (do (pk-hyperenv-shove argenvs
+                            (pk-make-hyperenv
+                              pk-hyped-sym-lexid.hyped-varname env)
+                            (+ "Two mc-rest parameters had conflicting "
+                               "lexid meanings."))
+                          hyped-varname)
+                      (err "A mc-rest parameter wasn't an identifier.")]
+              global-staticenv
+                (pk-hyperenv-get-global static-hyperenv lexid)
+              qq (do.shove:pk-soup-identifier-with-env
+                   qq lexid global-staticenv)
+              args (map shove
+                     (pk-identifier-list args lexid global-staticenv))
+              rest (do.shove:pk-soup-identifier-with-env
+                     rest lexid global-staticenv))
         (pk-compile-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           (thunk:let local-static-hyperenv
                        (pk-hyperenv-shadow-assoclist static-hyperenv
                          (map [list _ pk-qqmeta*]
-                           (cons qq-hyped-sym (cons rest args))))
+                           (cons qq (cons rest args))))
             (pk-attach-to argenvs
               (annotate 'pk-lambdacalc-mc
                 (list len.args t
                   (pk-detach:do.build-fn:pk-attach:annotate
                     'pk-lambdacalc-thin-fn
-                    (list (cons qq-hyped-sym (join args list.rest))
-                          nil
+                    (list (join list.qq args list.rest) nil
                       (map [pk-detach:pk-fork-to-get:pk-soup-compile
                              _ lexid local-static-hyperenv]
                            body))))))))))))
 
-(def pk-mc-compiler-for (qq-sym build-fn)
+(def pk-mc-compiler-for (build-fn)
   (fn (compiled-op body lexid static-hyperenv)
     (let token-args otokens.body
-      (unless (<= 2 len.token-args)
-        (err "A thin-mc body didn't have at least two words in it."))
-      (withs ((args . body) token-args
-              (args) (or (aand (oi.olen< rep.args 2)
-                               (check soup->list.args
-                                 (andf single
-                                       rc.a-!pk-bracketed-soup:car)))
-                         (err:+ "A thin-mc parameter list wasn't a "
-                                "'pk-bracketed-soup."))
+      (unless (<= 3 len.token-args)
+        (err "A mc body didn't have at least three words in it."))
+      (withs ((qq args . body) token-args
               argenvs (pk-make-hyperenv)
-              ident-ify
-                [iflet (hyped-varname env)
-                         (pk-soup-identifier-with-env
-                           _ lexid (pk-hyperenv-get-global
-                                     static-hyperenv lexid))
-                  (do (pk-hyperenv-shove argenvs
-                        (pk-make-hyperenv
-                          pk-hyped-sym-lexid.hyped-varname env)
-                        (+ "Two mc parameters had conflicting lexid "
-                           "meanings."))
-                      hyped-varname)
-                  (err "A mc parameter wasn't an identifier.")]
-              qq-hyped-sym (annotate 'pk-hyped-sym
-                             (list lexid qq-sym)))
-        (zap [map ident-ify (otokens rep._.0)] args)
+              shove [iflet (hyped-varname env) _
+                      (do (pk-hyperenv-shove argenvs
+                            (pk-make-hyperenv
+                              pk-hyped-sym-lexid.hyped-varname env)
+                            (+ "Two mc parameters had conflicting "
+                               "lexid meanings."))
+                          hyped-varname)
+                      (err "A mc parameter wasn't an identifier.")]
+              global-staticenv
+                (pk-hyperenv-get-global static-hyperenv lexid)
+              qq (do.shove:pk-soup-identifier-with-env
+                   qq lexid global-staticenv)
+              args (map shove (pk-identifier-list
+                                args lexid global-staticenv)))
         (pk-compile-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           (thunk:let local-static-hyperenv
                        (pk-hyperenv-shadow-assoclist static-hyperenv
-                         (map [list _ pk-qqmeta*]
-                           (cons qq-hyped-sym args)))
+                         (map [list _ pk-qqmeta*] (cons qq args)))
             (pk-attach-to argenvs
               (annotate 'pk-lambdacalc-mc
                 (list len.args nil
                   (pk-detach:do.build-fn:pk-attach:annotate
                     'pk-lambdacalc-thin-fn
-                    (list (cons qq-hyped-sym args) nil
+                    (list (cons qq args) nil
                       (map [pk-detach:pk-fork-to-get:pk-soup-compile
                              _ lexid local-static-hyperenv]
                            body))))))))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tm
-  (pk-wrap-op:pk-mc-compiler-for 'qq idfn))
+  (pk-wrap-op:pk-mc-compiler-for idfn))
 
 (pk-dynenv-set-meta pk-replenv* 'tm*
-  (pk-wrap-op:pk-mc-rest-compiler-for 'qq idfn))
+  (pk-wrap-op:pk-mc-rest-compiler-for idfn))
 
 (pk-dynenv-set-meta pk-replenv* 'hm
-  (pk-wrap-op:pk-mc-compiler-for 'qq
+  (pk-wrap-op:pk-mc-compiler-for
     [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
 
 (pk-dynenv-set-meta pk-replenv* 'hm*
-  (pk-wrap-op:pk-mc-rest-compiler-for 'qq
+  (pk-wrap-op:pk-mc-rest-compiler-for
     [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
 
 (pk-dynenv-set pk-replenv* 'wrap-op pk-wrap-op)

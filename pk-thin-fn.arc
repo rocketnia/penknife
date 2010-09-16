@@ -356,28 +356,21 @@
       (err:+ "A thin-fn-rest body didn't have at least three words "
              "in it."))
     (withs ((args rest . body) token-args
-            (args) (or (aand (oi.olen< rep.args 2)
-                             (check soup->list.args
-                               (andf single
-                                     rc.a-!pk-bracketed-soup:car)))
-                       (err:+ "A thin-fn-rest parameter list wasn't "
-                              "a 'pk-bracketed-soup."))
             argenvs (pk-make-hyperenv)
-            ident-ify
-              [iflet (hyped-varname env)
-                       (pk-soup-identifier-with-env
-                         _ lexid (pk-hyperenv-get-global
-                                   static-hyperenv lexid))
-                (do (pk-hyperenv-shove argenvs
-                      (pk-make-hyperenv
-                        pk-hyped-sym-lexid.hyped-varname env)
-                      (+ "Two thin-fn-rest parameters had "
-                         "conflicting lexid meanings."))
-                    hyped-varname)
-                (err:+ "A thin-fn-rest parameter wasn't an "
-                       "identifier.")])
-      (zap [map ident-ify (otokens rep._.0)] args)
-      (zap ident-ify rest)
+            shove [iflet (hyped-varname env) _
+                    (do (pk-hyperenv-shove argenvs
+                          (pk-make-hyperenv
+                            pk-hyped-sym-lexid.hyped-varname env)
+                          (+ "Two fn-rest parameters had conflicting "
+                             "lexid meanings."))
+                        hyped-varname)
+                    (err "A fn-rest parameter wasn't an identifier.")]
+            global-staticenv
+              (pk-hyperenv-get-global static-hyperenv lexid)
+            args (map shove
+                   (pk-identifier-list args lexid global-staticenv))
+            rest (do.shove:pk-soup-identifier-with-env
+                   rest lexid global-staticenv))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
         (thunk:let local-static-hyperenv
@@ -395,26 +388,19 @@
     (unless (<= 2 len.token-args)
       (err "A thin-fn body didn't have at least two words in it."))
     (withs ((args . body) token-args
-            (args) (or (aand (oi.olen< rep.args 2)
-                             (check soup->list.args
-                               (andf single
-                                     rc.a-!pk-bracketed-soup:car)))
-                       (err:+ "A thin-fn parameter list wasn't a "
-                              "'pk-bracketed-soup."))
             argenvs (pk-make-hyperenv)
-            ident-ify
-              [iflet (hyped-varname env)
-                       (pk-soup-identifier-with-env
-                         _ lexid (pk-hyperenv-get-global
-                                   static-hyperenv lexid))
-                (do (pk-hyperenv-shove argenvs
-                      (pk-make-hyperenv
-                        pk-hyped-sym-lexid.hyped-varname env)
-                      (+ "Two thin-fn parameters had conflicting "
-                         "lexid meanings."))
-                    hyped-varname)
-                (err "A thin-fn parameter wasn't an identifier.")])
-      (zap [map ident-ify (otokens rep._.0)] args)
+            shove [iflet (hyped-varname env) _
+                    (do (pk-hyperenv-shove argenvs
+                          (pk-make-hyperenv
+                            pk-hyped-sym-lexid.hyped-varname env)
+                          (+ "Two fn parameters had conflicting "
+                             "lexid meanings."))
+                        hyped-varname)
+                    (err "A fn parameter wasn't an identifier.")]
+            global-staticenv
+              (pk-hyperenv-get-global static-hyperenv lexid)
+            args (map shove
+                   (pk-identifier-list args lexid global-staticenv)))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
         (thunk:let local-static-hyperenv

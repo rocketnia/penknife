@@ -38,6 +38,13 @@
 
 ; Declaration listing:
 ;
+; [macq* name$ qq$ [args$&] rest$ body&]
+; [macq name$ qq$ [args$&] body&]
+; [mac* name$ [args$&] rest$ body&]
+; [mac name$ [args$&] body&]
+; [fun* name: [args$&] rest$ body&]
+; [fun name: [args$&] body&]
+;
 ; [idfn result]
 ; [list elements&]
 ; nil                           ; returns nil
@@ -48,20 +55,40 @@
 ; [let var$ val body&]
 
 
-[= idfn [hf [result] result]]
-[= list [hf* [] elements elements]]
-[= nil list.]
-[= join [hf* [] lists [apply + nil lists]]]
+[= macq*'meta [wrap-op:hm* our-qq [name qq args rest] body
+                our-qq.[= meta.\,name [wrap-op:hm* \,qq \,args \,rest
+                                        \,body]]]]
 
-[= ` [hf* [] args-a
-       [hf [func]
-         [hf* [] args-b
-           [apply func [join args-a args-b]]]]]]
+[macq* macq our-qq [name qq args] body
+  our-qq.[= meta.\,name [wrap-op:hm \,qq \,args \,body]]]
+
+[macq* mac* qq [name args rest] body
+  qq.[macq* \,name \,body.qq \,args \,rest \,body]]
+
+[mac* mac [name args] body
+  qq.[macq \,name \,body.qq \,args \,body]]
+
+[mac* fun* [name args rest] body
+  qq.[= \,name [hf* \,args \,rest \,body]]]
+
+[mac* fun [name args] body
+  qq.[= \,name [hf \,args \,body]]]
+
+
+[fun idfn [result] result]
+[fun* list [] elements elements]
+[= nil list.]
+[fun* join [] lists [apply + nil lists]]
+
+[fun* ` [] args-a
+  [hf [func]
+    [hf* [] args-b
+      [apply func [join args-a args-b]]]]]
 
 [= enmeta command.idfn]
 
-[= meta='meta [wrap-op:hm [var val]
-                qq.[= meta.\,var meta.\,val]]]
+[mac meta= [var val]
+  qq.[= meta.\,var meta.\,val]]
 
-[= let'meta [wrap-op:hm* [var val] body
-              qq.[[tf [\,var] \,body] \,val]]]
+[mac* let [var val] body
+  qq.[[tf [\,var] \,body] \,val]]

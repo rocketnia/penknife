@@ -183,6 +183,7 @@
 ; (pk-string-identifier-with-env string lexid env)
 ; (pk-soup-identifier-with-env soup lexid env)
 ; (pk-soup-identifier soup lexid)
+; (pk-identifier-list soup lexid env)
 ; (pk-soup-compile-tl soup lexid static-hyperenv)   ; rulebook
 ; (pk-soup-compile soup lexid static-hyperenv)      ; rulebook
 ; (pk-sip-compile self lexid static-hyperenv)       ; rulebook
@@ -1122,6 +1123,22 @@
 (def pk-soup-identifier (soup lexid)
   (car:pk-soup-identifier-with-env soup lexid nil))
 
+(def pk-identifier-list (soup lexid env)
+  (zap otokens soup)
+  (unless single.soup
+    (err "An identifier list wasn't exactly one word."))
+  (zap car soup)
+  (unless (and (no oi.oempty.soup) (oi.olen< soup 2))
+    (err "An identifier list wasn't exactly one sip: " soup))
+  (zap [oref _ 0] soup)
+  (case type.soup pk-sip-hype-staticenv
+    (let (inner-lexid globalenv inner-soup) rep.soup
+      (pk-identifier-list inner-soup inner-lexid globalenv))
+    (do (case type.soup pk-bracketed-soup nil
+          (err "An identifier list wasn't a 'pk-bracketed-soup."))
+        (map [pk-soup-identifier-with-env _ lexid env]
+             (otokens rep.soup.0)))))
+
 (mr:rule pk-soup-compile-tl (soup lexid static-hyperenv) expression
   (pk-fork-to-meta:pk-soup-compile soup lexid static-hyperenv))
 
@@ -1362,11 +1379,10 @@
           (pr "pk> ")]))
 
 (def pkdo (lexid env str)
-  ; Don't display any results, raise all errors, and don't show any
-  ; prompts.
+  ; Display no results, raise all errors, and show no prompts.
+  ; NOTE: Rainbow doesn't like [].
   (pktl lexid env str [do] err [do]))
 
-; NOTE: Rainbow doesn't like [].
 (def pkload (lexid env filename)
   (w/infile str filename (pkdo lexid env str)))
 
