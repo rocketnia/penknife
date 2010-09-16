@@ -353,13 +353,18 @@
     (with (getter (memo:thunk:pk-attach:annotate 'pk-lambdacalc-demeta
                     (list:pk-detach:pk-fork-to-meta:pk-soup-compile
                       arg lexid static-hyperenv))
-           var    (memo:thunk:or (pk-soup-identifier arg lexid)
-                    (err:+ "The meta of a non-identifier can't be "
-                           "set.")))
+           info (memo:thunk:iflet (hyped-sym env)
+                            (pk-soup-identifier-with-env arg lexid
+                              (pk-hyperenv-get static-hyperenv lexid))
+                  (list hyped-sym (pk-make-hyperenv
+                                    pk-hyped-sym-lexid.hyped-sym env))
+                  (err "The meta of a non-identifier can't be set.")))
       (annotate 'pk-compile-fork
         (obj get   getter
-             set   [pk-attach:annotate 'pk-lambdacalc-set-meta
-                     (list (pk-noattach call.var) pk-detach._)]
+             set   [let (hyped-varname hyperenv) call.info
+                     (pk-attach-to hyperenv
+                       (annotate 'pk-lambdacalc-set-meta
+                         (list hyped-varname pk-detach._)))]
              meta  getter
              op    (pk-staticenv-default-op-compiler:pk-hyperenv-get
                      static-hyperenv lexid))))))

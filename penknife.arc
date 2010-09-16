@@ -131,7 +131,7 @@
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-make-ad-hoc-env)
-; (pk-staticenv-get-compile-fork staticenv hyped-varname)
+; (pk-staticenv-get-compile-fork staticenv hyped-varname globalenv)
 ; (pk-staticenv-default-op-compiler self)     ; rulebook
 ; (pk-staticenv-read-eval-tl self lexid str)  ; rulebook
 ; (pk-staticenv-literal self name)            ; rulebook
@@ -149,6 +149,7 @@
 ; (pk-make-hyperenv . args)
 ; (pk-hyperenv-get hyperenv lexid)
 ; (pk-hyperenv-get-global hyperenv lexid)
+; (pk-hyperenv-get-both hyperenv lexid)
 ; (pk-hyperenv-combine a b)
 ; (pk-hyperenv-shove place hyperenv-part error)                ; macro
 ; (pk-hyperenv-overlap a b)
@@ -405,15 +406,15 @@
 ;                         to the Arc REPL.
 ;   rep._!compile-fork:   If present, a singleton proper list
 ;                         containing a Penknife function which, when
-;                         given a 'pk-hyped-sym variable name, will
-;                         return the 'pk-compile-fork value to return
-;                         when compiling an identification of the
-;                         variable when treating an environment
-;                         containing a binding with this meta-value as
-;                         a static environment. If instead this is
-;                         nil, then a default compile fork should be
-;                         constructed according to that environment's
-;                         own behavior.
+;                         given a 'pk-hyped-sym variable name and the
+;                         global environment corresponding to the
+;                         environment it's looked up in, will return
+;                         the 'pk-compile-fork value to return when
+;                         compiling an appearance of the variable when
+;                         its environment as a static environment. If
+;                         If instead this is nil, then a default
+;                         compile fork should be constructed according
+;                         to that environment's own behavior.
 ;   rep._!error:          If present, the string to raise as an error
 ;                         message whenever the result, but not this
 ;                         metadata, is looked up in a binding or
@@ -844,13 +845,14 @@
 (def pk-make-ad-hoc-env ()
   (let rep (table) (annotate 'pk-ad-hoc-env thunk.rep)))
 
-(def pk-staticenv-get-compile-fork (staticenv hyped-varname)
+(def pk-staticenv-get-compile-fork (staticenv hyped-varname globalenv)
   (aif (aand (pk-dynenv-get-binding
                staticenv pk-hyped-sym-name.hyped-varname)
              (!compile-fork:rep:pk-binding-get-meta car.it))
-    (pk-call car.it hyped-varname)
+    (pk-call car.it hyped-varname globalenv)
     (let op-compiler pk-staticenv-default-op-compiler.staticenv
-      (pk-call pk-compile-fork-from-op.op-compiler hyped-varname))))
+      (pk-call pk-compile-fork-from-op.op-compiler
+        hyped-varname globalenv))))
 
 (rc:ontype pk-staticenv-default-op-compiler ()
              pk-ad-hoc-env pk-ad-hoc-env
@@ -916,14 +918,15 @@
       (mappend [list _.0 (list _.1 _.1)] pair.args))))
 
 (def pk-hyperenv-get (hyperenv lexid)
-  (car:or rep.hyperenv.lexid
-    (err:+ "A hyperenvironment was indexed with an unsupported "
-           "lexid.")))
+  (car:pk-hyperenv-get-both hyperenv lexid))
 
 (def pk-hyperenv-get-global (hyperenv lexid)
-  (cadr:or rep.hyperenv.lexid
-    (err:+ "A hyperenvironment was indexed with an unsupported "
-           "lexid.")))
+  (cadr:pk-hyperenv-get-both hyperenv lexid))
+
+(def pk-hyperenv-get-both (hyperenv lexid)
+  (or rep.hyperenv.lexid
+      (err:+ "A hyperenvironment was indexed with an unsupported "
+             "lexid.")))
 
 (def pk-hyperenv-combine (a b)
   (zap rep a)
@@ -1066,15 +1069,18 @@
          op    op-compiler)))
 
 (def pk-compile-fork-from-op (op-compiler)
-  (fn (hyped-varname)
-    (annotate 'pk-compile-fork
-      (obj get   (thunk:pk-attach:annotate 'pk-lambdacalc-var
-                   hyped-varname)
-           set   [pk-attach:annotate 'pk-lambdacalc-set
-                   (list hyped-varname pk-detach._)]
-           meta  (thunk:pk-attach:annotate 'pk-lambdacalc-var-meta
-                   hyped-varname)
-           op    op-compiler))))
+  (fn (hyped-varname globalenv)
+    (let hyperenv (pk-make-hyperenv
+                    pk-hyped-sym-lexid.hyped-varname globalenv)
+      (annotate 'pk-compile-fork
+        (obj get   (memo:thunk:pk-attach-to hyperenv
+                     (annotate 'pk-lambdacalc-var hyped-varname))
+             set   [pk-attach-to hyperenv
+                     (annotate 'pk-lambdacalc-set
+                       (list hyped-varname pk-detach._))]
+             meta  (memo:thunk:pk-attach-to hyperenv
+                     (annotate 'pk-lambdacalc-var-meta hyped-varname))
+             op    op-compiler)))))
 
 
 (def pk-function-call-compiler
@@ -1124,13 +1130,22 @@
     (do.fail "The word wasn't simply a single non-character."))
   (pk-sip-compile (oref soup 0) lexid static-hyperenv))
 
+; TODO: See if this can be simpler.
 (mr:rule pk-soup-compile (soup lexid static-hyperenv) identifier
   (iflet (hyped-sym env) (pk-soup-identifier-with-env soup lexid
                            (pk-hyperenv-get static-hyperenv lexid))
-    (let name pk-hyped-sym-name.hyped-sym
-      (iflet (literal) (pk-staticenv-literal env name)
-        (pk-compile-literal-from-thunk thunk.literal env)
-        (pk-staticenv-get-compile-fork env hyped-sym)))
+    (let (local-env global-env) (pk-hyperenv-get-both
+                                  (if env
+                                    (pk-hyperenv-overlap
+                                      (pk-make-hyperenv lexid env)
+                                      static-hyperenv)
+                                    static-hyperenv)
+                                  lexid)
+      (let name pk-hyped-sym-name.hyped-sym
+        (iflet (literal) (pk-staticenv-literal local-env name)
+          (pk-compile-literal-from-thunk thunk.literal local-env)
+          (pk-staticenv-get-compile-fork
+            local-env hyped-sym global-env))))
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-soup-compile (soup lexid static-hyperenv) infix
@@ -1266,14 +1281,8 @@
 (def-pk-eval pk-lambdacalc-demeta
   (pk-eval-meta car.self lexid dyn-hyperenv))
 
-; TODO: See if this 'pk-hyperenv-combine call can be replaced with
-; more comprehensive subexpression attachment. Specifically,
-; 'pk-compile-fork-from-op would use 'pk-attach-to.
 (def-pk-eval-meta pk-attached-lambdacalc
-  (pk-eval-meta self.1 lexid
-    (or (pk-hyperenv-combine dyn-hyperenv self.0)
-        (err:+ "A 'pk-attached-lambdacalc was evaluated in a dynamic "
-               "hyperenvironment that conflicted with its own."))))
+  (pk-eval-meta self.1 lexid self.0))
 
 (def-pk-eval-meta pk-compile-fork
   (pk-eval-meta pk-fork-to-meta.tagged-self lexid dyn-hyperenv))
