@@ -43,6 +43,7 @@
 ; nil                           ; returns nil
 ; [join lists&]
 ; [[[` func] args-a&] args-b&]
+; [let var$ val body&]
 
 
 [= idfn [hf [result] result]]
@@ -54,3 +55,13 @@
        [hf [func]
          [hf* [] args-b
            [apply func [join args-a args-b]]]]]]
+
+; TODO: Add this.
+;
+;[= enmeta command.idfn]
+;
+;[= meta='meta [wrap-op:hm [var val]
+;                qq[= meta.\,var meta.\,val]]]
+
+[= let'meta [wrap-op:hm* [var val] body
+              qq.[[tf [\,var] \,body] \,val]]]

@@ -75,6 +75,7 @@
 ; Declaration listing:
 ;
 ; ut   ; namespace of Lathe's utils.arc
+; dy   ; namespace of Lathe's dyn.arc
 ; mr   ; namespace of Lathe's multival/multirule.arc
 ; oc   ; namespace of Lathe's multival/order-contribs.arc
 ; rc   ; namespace of Lathe's orc/orc.arc
@@ -98,6 +99,9 @@
 ; (orev self)                                     ; rulebook
 ; (o-ltrim self (o test soup-whitec))             ; rulebook
 ; (o-rtrim self (o test soup-whitec))             ; rulebook
+; (oi.olen< self number)                          ; external rule
+; (osplit self i)                                 ; rulebook
+; (oref self i (o default))                       ; rulebook
 ; (o-split-first-token seq (o test soup-whitec))
 ; (o-split-last-token seq (o test soup-whitec))
 ; (otokens seq (o test soup-whitec))
@@ -108,20 +112,14 @@
 ; (slurp->string self)                            ; rulebook
 ; (soup->list soup)
 ; (slurp->list self)                              ; rulebook
+; pk-empty-soup*            ; value of type 'pk-soup
 ; (pk-soup-singleton elem)
 ;
-; (pk-fork-to-get self)                       ; rulebook
-; (pk-fork-to-set self new-value)             ; rulebook
-; (pk-fork-to-meta self)                      ; rulebook
-; (pk-fork-to-op-method self)                 ; rulebook
-; (pk-fork-to-op compiled-op body staticenv)
-;
-; (pk-compile-leaf-from-thunk staticenv getter)
-; (pk-compile-literal-from-thunk compile-value staticenv)
-; (pk-compile-call-from-thunk compile-op-and-body op-compiler)
-; (pk-compile-fork-from-op op-compiler)
-;
-; (pk-function-call-compiler compiled-op body staticenv)
+; (pk-fork-to-get self)                                   ; rulebook
+; (pk-fork-to-set self new-value)                         ; rulebook
+; (pk-fork-to-meta self)                                  ; rulebook
+; (pk-fork-to-op-method self)                             ; rulebook
+; (pk-fork-to-op compiled-op body lexid static-hyperenv)
 ;
 ; (pk-meta . args)                      ; macro
 ; (pk-demeta meta)
@@ -132,42 +130,81 @@
 ; (pk-binding-set self new-value)       ; rulebook
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
-; (pk-staticenv-get-compile-fork self varname)  ; rulebook
-; (pk-staticenv-default-op-compiler self)       ; rulebook
-; (pk-staticenv-read-eval-tl self str)          ; rulebook
-; (pk-staticenv-literal self name)              ; rulebook
-; (pk-dynenv-ensure-binding self varname)       ; rulebook
-; (pk-dynenv-get-binding self varname)          ; rulebook
-; (pk-dynenv-get self varname)                  ; rulebook
-; (pk-dynenv-get-meta self varname)             ; rulebook
-; (pk-dynenv-set self varname)                  ; rulebook
-; (pk-dynenv-set-meta self varname)             ; rulebook
+; (pk-make-ad-hoc-env)
+; (pk-staticenv-get-compile-fork staticenv hyped-varname)
+; (pk-staticenv-default-op-compiler self)     ; rulebook
+; (pk-staticenv-read-eval-tl self lexid str)  ; rulebook
+; (pk-staticenv-literal self name)            ; rulebook
+; (pk-dynenv-ensure-binding self varname)     ; rulebook
+; (pk-dynenv-get-binding self varname)        ; rulebook
+; (pk-dynenv-get self varname)                ; rulebook
+; (pk-dynenv-get-meta self varname)           ; rulebook
+; (pk-dynenv-set self varname)                ; rulebook
+; (pk-dynenv-set-meta self varname)           ; rulebook
 ;
-; (pk-alpha-id-char x)
-; (pk-infix-id-char x)
-; (pk-string-identifier x)
-; (pk-soup-identifier x)
-; (pk-soup-compile-tl soup staticenv)  ; rulebook
-; (pk-soup-compile soup staticenv)     ; rulebook
-; (pk-sip-compile self staticenv)      ; rulebook
+; (pk-hyped-sym-lexid hyped-sym)
+; (pk-hyped-sym-name hyped-sym)
+; (rc.oiso2 a b)                  ; external rule
+;
+; (pk-make-hyperenv . args)
+; (pk-hyperenv-get hyperenv lexid)
+; (pk-hyperenv-get-global hyperenv lexid)
+; (pk-hyperenv-combine a b)
+; (pk-hyperenv-shove place hyperenv-part error)                ; macro
+; (pk-hyperenv-overlap a b)
+; (pk-hyperenv-globals hyperenv)
+; (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
+; (pk-dyn-hyperenv-get hyperenv hyped-varname)
+; (pk-dyn-hyperenv-get-meta hyperenv hyped-varname)
+; (pk-dyn-hyperenv-set hyperenv hyped-varname new-value)
+; (pk-dyn-hyperenv-set-meta hyperenv hyped-varname new-value)
+;
+; pk-attach-param*                ; value satisfying dy!aparam
+; (fn-pk-noattach body)
+; (pk-noattach . body)            ; macro
+; (fn-pk-attach body (o built-up-hyperenv (pk-make-hyperenv)))
+; (pk-attach . body)              ; macro
+; (pk-attach-to hyperenv . body)  ; macro
+; (fn-pk-detach body)
+; (pk-detach . body)              ; macro
+; (pk-detachmap seq)
+; (pk-attach-op hyperenv)
+;
+; (pk-compile-leaf-from-thunk staticenv getter)
+; (pk-compile-literal-from-thunk compile-value staticenv)
+; (pk-compile-call-from-thunk compile-op-and-body op-compiler)
+; (pk-compile-fork-from-op op-compiler)
+;
+; (pk-function-call-compiler compiled-op body lexid static-hyperenv)
+;
+; (pk-alpha-id-char char)
+; (pk-infix-id-char char)
+; (pk-string-identifier-with-env string lexid env)
+; (pk-soup-identifier-with-env soup lexid env)
+; (pk-soup-identifier soup lexid)
+; (pk-soup-compile-tl soup lexid static-hyperenv)   ; rulebook
+; (pk-soup-compile soup lexid static-hyperenv)      ; rulebook
+; (pk-sip-compile self lexid static-hyperenv)       ; rulebook
 ;
 ; (pk-call self . args)       ; rulebook
 ; (pk-call-set self . args)   ; rulebook
 ; (pk-call-meta self . args)  ; rulebook
 ;
-; (def-pk-eval type . body)       ; macro
-; (def-pk-eval-meta type . body)  ; macro
-; (pk-eval self dynenv)           ; rulebook
-; (pk-eval-meta self dynenv)      ; rulebook
-; (pk-eval-tl self dynenv)        ; rulebook
+; (def-pk-eval type . body)               ; macro
+; (def-pk-eval-meta type . body)          ; macro
+; (pk-eval self lexid dyn-hyperenv)       ; rulebook
+; (pk-eval-meta self lexid dyn-hyperenv)  ; rulebook
+; (pk-eval-tl self lexid dyn-hyperenv)    ; rulebook
 ;
-; pk-replenv*  ; value of type 'pk-ad-hoc-env
+; pk-repllexid*  ; symbol to be used as a lexid (lexical ID)
+; pk-replenv*    ; value of type 'pk-ad-hoc-env
 ;
 ; (error-message error)
-; (pktl env str act-on report-error prompt)
+; (pktl lexid env str act-on report-error prompt)
 ; (pkrepl (o str (errsafe:stdin)))
-; (pkdo env str)
-; (pkload env filename)
+; (pkdo lexid env str)
+; (pkload lexid env filename)
+; (pkcomp str)
 ;
 ;
 ; Type listing:
@@ -213,19 +250,20 @@
 ;        to evaluate to.
 ;
 ; pk-lambdacalc-var
-;   rep: A symbol representing the variable to look up in the dynamic
-;        environment when evaluating this expression.
+;   rep: A 'pk-hyped-sym value representing the variable to look up in
+;        the dynamic hyperenvironment when evaluating this expression.
 ;
 ; pk-lambdacalc-var-meta
-;   rep: A symbol representing the variable to look up in the dynamic
-;        environment when evaluating this expression. This looks up
-;        the 'pk-ad-hoc-meta metadata table corresponding to the
-;        variable.
+;   rep: A 'pk-hyped-sym value representing the variable to look up in
+;        the dynamic hyperenvironment when evaluating this expression.
+;        This looks up the 'pk-ad-hoc-meta metadata table
+;        corresponding to the variable.
 ;
 ; pk-lambdacalc-set
 ;   rep: A list which supports the following fields:
-;   rep._.0:  A symbol representing the variable to modify in the
-;             dynamic environment when evaluating this expression.
+;   rep._.0:  A 'pk-hyped-sym value representing the variable to
+;             modify in the dynamic hyperenvironment when evaluating
+;             this expression.
 ;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will provide the new value for the variable
 ;             (which will also be the result of this expression). If
@@ -235,12 +273,13 @@
 ;
 ; pk-lambdacalc-set-meta
 ;   rep: A list which supports the following fields:
-;   rep._.0:  A symbol representing the variable to modify in the
-;             dynamic environment when evaluating this expression.
+;   rep._.0:  A 'pk-hyped-sym value representing the variable to
+;             modify in the dynamic hyperenvironment when evaluating
+;             this expression.
 ;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
-;             types, which will provide the new metadata for the
-;             variable (and which will also be the non-metadata result
-;             of this expression).
+;             types, whose non-metadata result will provide the new
+;             metadata for the variable (and which will also be the
+;             non-metadata result of this expression).
 ;
 ; pk-lambdacalc-call
 ;   rep: A cons cell containing the expression for the operator and a
@@ -272,26 +311,25 @@
 ; pk-compile-fork
 ;   rep: A table which supports the following fields:
 ;   rep._!get:   A value which, when called using 'pk-call, accepts no
-;                arguments and returns a value of one of the
-;                'pk-lambdacalc-[something] types, representing an
-;                expression that returns a value to be used in a
-;                parent expression.
-;   rep._!set:   A value which, when called using 'pk-call, accepts an
-;                expression and returns another expression that sets
-;                something to the value returned by the first
-;                expression. Each of these expressions is a value of
-;                one of the 'pk-lambdacalc-[something] types.
+;                arguments and returns a 'pk-attached-lambdacalc
+;                value, representing an expression that returns a
+;                value to be used in a parent expression.
+;   rep._!set:   A value which, when called using 'pk-call, accepts
+;                one 'pk-attached-lambdacalc value and returns another
+;                that sets something to the value returned by the
+;                first expression.
 ;   rep._!meta:  A value which, when called using 'pk-call, accepts no
-;                arguments and returns a value of one of the
-;                'pk-lambdacalc-[something] types, representing an
-;                expression that returns a value to be used by a
-;                top-level command interpreter.
+;                arguments and returns a 'pk-attached-lambdacalc
+;                value, representing an expression that returns a
+;                value to be used by a top-level command interpreter.
 ;   rep._!op:    A value which, when called using 'pk-call or
 ;                'pk-call-meta, accepts this very 'pk-compile-fork
 ;                value (the compiled operator), a 'pk-soup value (the
-;                uncompiled body), and a static environment and
-;                returns a 'pk-compile-fork value representing the
-;                compiled expression.
+;                uncompiled body), an lexid (lexical ID), and a static
+;                hyperenvironment (a table mapping lexids to local and
+;                global static environments) and returns a
+;                'pk-compile-fork value representing the compiled
+;                expression.
 ;
 ; pk-ad-hoc-binding
 ;   rep: A list which supports getting and setting the following
@@ -309,6 +347,37 @@
 ;        being the table itself, is so that Jarc 17 and Rainbow don't
 ;        error out when trying to display an environment which has an
 ;        element that refers back to the same environment.
+;
+; pk-hyperenv
+;   rep: A table mapping lexids ("lexical IDs," which identify
+;        independent sections of textual code) to two-element proper
+;        lists supporting the following fields:
+;   rep._.lexid.0:  A local environment.
+;   rep._.lexid.1:  A global environment corresponding to that local
+;                   environment.
+;
+; pk-hyped-sym
+;   rep: A list which supports the following fields, which together
+;        indicate a specific variable in a specific environment in a
+;        hyperenvironment:
+;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.1:  A symbol to be used as a variable name.
+;
+; pk-sip-hype-staticenv
+;   rep: A list which supports the following fields:
+;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.1:  An environment to use as the global environment
+;             associated with that lexid in the global dynamic
+;             hyperenvironment when evaluating the expression
+;             resulting from this syntax.
+;   rep._.2:  A 'pk-soup word to be compiled using that lexid.
+;
+; pk-attached-lambdacalc
+;   rep: A list which supports the following fields:
+;   rep._.0:  A hyperenvironment containing global environments to use
+;             when evaluating this expression.
+;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
+;             types.
 ;
 ; pk-fn-meta
 ;   rep: A singleton proper list containing a Penknife function which
@@ -335,8 +404,8 @@
 ;                         should exit and return the contained value
 ;                         to the Arc REPL.
 ;   rep._!compile-fork:   If present, a singleton proper list
-;                         containing a Penknife value which, when
-;                         given a variable name as a string, will
+;                         containing a Penknife function which, when
+;                         given a 'pk-hyped-sym variable name, will
 ;                         return the 'pk-compile-fork value to return
 ;                         when compiling an identification of the
 ;                         variable when treating an environment
@@ -354,6 +423,7 @@
 
 (let lathe [+ lathe-dir* _ '.arc]
   (use-fromwds-as ut do.lathe!utils
+                  dy do.lathe!dyn
                   mr do.lathe!multival/multirule
                   oc do.lathe!multival/order-contribs
                   rc do.lathe!orc/orc
@@ -582,6 +652,55 @@
            throw.nil)
          (-- number oi.olen.slurp))))
 
+(rc:ontype osplit (i) rc.list list
+  (when (<= 0 i)
+    (ut:xloop rev-before nil after self i i
+      (case i 0
+        (list rev.rev-before after)
+        (whenlet (first . rest) after
+          (do.next (cons first rev-before) rest (- i 1)))))))
+
+(rc:ontype osplit (i) string string
+  (errsafe:split self i))
+
+; TODO: See if this can be more elegant.
+(rc:ontype osplit (i) pk-soup pk-soup
+  (zap rep self)
+  (point return
+    (unless (<= 0 i)
+      do.return.nil)
+    (let before (accum acc
+                  (while:case i 0 nil
+                    (case self nil
+                      do.return.nil
+                      (let slurp pop.self
+                        (iflet (slurp-before slurp-after)
+                                 (osplit slurp i)
+                          (do (unless oi.oempty.slurp-before
+                                do.acc.slurp-before)
+                              (unless oi.oempty.slurp-after
+                                (push slurp-after self))
+                              nil)
+                          (do do.acc.slurp
+                              (-- i oi.olen.slurp)))))))
+      (map [annotate 'pk-soup _] (list before self)))))
+
+(rc:ontype oref (i (o default)) rc.list list
+  (on-err [do default] (fn () self.i)))
+
+(rc:ontype oref (i (o default)) string string
+  (on-err [do default] (fn () self.i)))
+
+(w/uniq missing
+  (rc:ontype oref (i (o default)) pk-soup pk-soup
+    (when (<= 0 i)
+      (catch:each slurp rep.self
+        (let elem (oref slurp i missing)
+          (unless (is elem missing)
+            throw.elem)
+          (unless (<= 0 (-- i oi.olen.slurp))
+            throw.default))))))
+
 (def o-split-first-token (seq (o test soup-whitec))
   (zap testify test)
   (let (margin rest) (o-ltrim seq test)
@@ -668,6 +787,8 @@
 (oc:label-prefer-labels-last slurp->list-default-last
   'slurp->list 'default)
 
+(= pk-empty-soup* (annotate 'pk-soup nil))
+
 ; TODO: See how to make this aware of nonstandard kinds of slurps.
 (def pk-soup-singleton (elem)
   (annotate 'pk-soup (list:.elem:case type.elem char string list)))
@@ -685,54 +806,9 @@
 (rc:ontype pk-fork-to-op-method () pk-compile-fork pk-compile-fork
   rep.self!op)
 
-(def pk-fork-to-op (compiled-op body staticenv)
+(def pk-fork-to-op (compiled-op body lexid static-hyperenv)
   (pk-call pk-fork-to-op-method.compiled-op
-    compiled-op body staticenv))
-
-
-(def pk-compile-leaf-from-thunk (staticenv getter)
-  (zap memo getter)
-  (annotate 'pk-compile-fork
-    (obj get   getter
-         set   [err:+ "An attempt was made to compile an ineligible "
-                      "form for setting."]
-         meta  getter
-         op    pk-staticenv-default-op-compiler.staticenv)))
-
-(def pk-compile-literal-from-thunk (compile-value staticenv)
-  (pk-compile-leaf-from-thunk staticenv
-    (thunk:annotate 'pk-lambdacalc-literal
-      (list call.compile-value))))
-
-(def pk-compile-call-from-thunk (compile-op-and-body op-compiler)
-  (zap memo compile-op-and-body)
-  (annotate 'pk-compile-fork
-    (obj get   (memo:thunk:annotate 'pk-lambdacalc-call
-                 call.compile-op-and-body)
-         set   (let compile-set
-                      (memo:thunk:annotate 'pk-lambdacalc-call-set
-                        call.compile-op-and-body)
-                 [annotate 'pk-lambdacalc-call
-                   (list call.compile-set _)])
-         meta  (memo:thunk:annotate 'pk-lambdacalc-call-meta
-                 call.compile-op-and-body)
-         op    op-compiler)))
-
-(def pk-compile-fork-from-op (op-compiler)
-  (fn (varname)
-    (annotate 'pk-compile-fork
-      (obj get   (thunk:annotate 'pk-lambdacalc-var varname)
-           set   [annotate 'pk-lambdacalc-set (list varname _)]
-           meta  (thunk:annotate 'pk-lambdacalc-var-meta varname)
-           op    op-compiler))))
-
-
-(def pk-function-call-compiler (compiled-op body staticenv)
-  (pk-compile-call-from-thunk
-    (thunk:cons pk-fork-to-get.compiled-op
-      (map [pk-fork-to-get:pk-soup-compile _ staticenv]
-           otokens.body))
-    pk-staticenv-default-op-compiler.staticenv))
+    compiled-op body lexid static-hyperenv))
 
 
 (mac pk-meta args
@@ -765,22 +841,26 @@
   (= rep.self.0 new-value))
 
 
-(rc:ontype pk-staticenv-get-compile-fork (varname)
-             pk-ad-hoc-env pk-ad-hoc-env
-  (aif (aand (pk-dynenv-get-binding self varname)
+(def pk-make-ad-hoc-env ()
+  (let rep (table) (annotate 'pk-ad-hoc-env thunk.rep)))
+
+(def pk-staticenv-get-compile-fork (staticenv hyped-varname)
+  (aif (aand (pk-dynenv-get-binding
+               staticenv pk-hyped-sym-name.hyped-varname)
              (!compile-fork:rep:pk-binding-get-meta car.it))
-    (pk-call car.it varname)
-    (let op-compiler pk-staticenv-default-op-compiler.self
-      (pk-call pk-compile-fork-from-op.op-compiler varname))))
+    (pk-call car.it hyped-varname)
+    (let op-compiler pk-staticenv-default-op-compiler.staticenv
+      (pk-call pk-compile-fork-from-op.op-compiler hyped-varname))))
 
 (rc:ontype pk-staticenv-default-op-compiler ()
              pk-ad-hoc-env pk-ad-hoc-env
   pk-function-call-compiler)
 
 ; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
-(rc:ontype pk-staticenv-read-eval-tl (str) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-staticenv-read-eval-tl (lexid str)
+             pk-ad-hoc-env pk-ad-hoc-env
   (aif (start-word&finish-bracket-word comment-ignorer.str)
-    (pk-eval-tl it self)
+    (pk-eval-tl it lexid (pk-make-hyperenv lexid self))
     (pk-meta action (list:fn ()) quit list!goodbye)))
 
 ; TODO: Allow literal syntax customization among 'pk-ad-hoc-env
@@ -817,70 +897,288 @@
     (pk-dynenv-ensure-binding self varname) new-value))
 
 
-; For efficiency, this assumes the argument is a character.
-(def pk-alpha-id-char (x)
-  (or alphadig.x (pos x "+-*/<=>") (< 255 int.x)))
+(def pk-hyped-sym-lexid (hyped-sym)
+  rep.hyped-sym.0)
+
+(def pk-hyped-sym-name (hyped-sym)
+  rep.hyped-sym.1)
+
+; This is used internally by rc.opos.
+(mr:rule rc.oiso2 (a b) pk-hyped-sym
+  (unless (all [isa _ 'pk-hyped-sym] (list a b))
+    (do.fail "The parameters weren't all of type \"pk-hyped-sym\"."))
+  (iso rep.a rep.b))
+
+
+(def pk-make-hyperenv args
+  (annotate 'pk-hyperenv
+    (apply copy (table)
+      (mappend [list _.0 (list _.1 _.1)] pair.args))))
+
+(def pk-hyperenv-get (hyperenv lexid)
+  (car:or rep.hyperenv.lexid
+    (err:+ "A hyperenvironment was indexed with an unsupported "
+           "lexid.")))
+
+(def pk-hyperenv-get-global (hyperenv lexid)
+  (cadr:or rep.hyperenv.lexid
+    (err:+ "A hyperenvironment was indexed with an unsupported "
+           "lexid.")))
+
+(def pk-hyperenv-combine (a b)
+  (zap rep a)
+  (catch:annotate 'pk-hyperenv
+    (ut:ret result copy.a
+      (each (lexid (b-local-env b-global-env)) rep.b
+        (iflet (a-local-env a-global-env) do.a.lexid
+          (unless (and (is a-local-env b-local-env)
+                       (is a-global-env b-global-env))
+            throw.nil)
+          (= do.result.lexid (list b-local-env b-global-env)))))))
+
+(mac pk-hyperenv-shove (place hyperenv-part error)
+  (w/uniq g-prev
+    `(zap (fn (,g-prev)
+            (or (pk-hyperenv-combine ,g-prev ,hyperenv-part)
+                (err ,error)))
+          ,place)))
+
+(def pk-hyperenv-overlap (a b)
+  (annotate 'pk-hyperenv (ut.tab+ rep.a rep.b)))
+
+(def pk-hyperenv-globals (hyperenv)
+  (annotate 'pk-hyperenv
+    (listtab:accum acc
+      (each (lexid (local-env global-env)) rep.hyperenv
+        (do.acc:list lexid (list global-env global-env))))))
+
+(def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
+  (let (lexid varname) rep.hyped-varname
+    (pk-dynenv-ensure-binding
+      (pk-hyperenv-get hyperenv lexid) varname)))
+
+(def pk-dyn-hyperenv-get (hyperenv hyped-varname)
+  (let (lexid varname) rep.hyped-varname
+    (pk-dynenv-get (pk-hyperenv-get hyperenv lexid) varname)))
+
+(def pk-dyn-hyperenv-get-meta (hyperenv hyped-varname)
+  (let (lexid varname) rep.hyped-varname
+    (pk-dynenv-get-meta (pk-hyperenv-get hyperenv lexid) varname)))
+
+(def pk-dyn-hyperenv-set (hyperenv hyped-varname new-value)
+  (let (lexid varname) rep.hyped-varname
+    (pk-dynenv-set
+      (pk-hyperenv-get hyperenv lexid) varname new-value)))
+
+(def pk-dyn-hyperenv-set-meta (hyperenv hyped-varname new-value)
+  (let (lexid varname) rep.hyped-varname
+    (pk-dynenv-set-meta
+      (pk-hyperenv-get hyperenv lexid) varname new-value)))
+
+
+(= pk-attach-param* dy.make-param.nil)
+
+(def fn-pk-noattach (body)
+  (dy:param-let pk-attach-param* nil
+    call.body))
+
+(mac pk-noattach body
+  `(fn-pk-noattach:fn () ,@body))
+
+(def fn-pk-attach (body (o built-up-hyperenv (pk-make-hyperenv)))
+  (dy:param-let pk-attach-param*
+                  [pk-hyperenv-shove built-up-hyperenv _
+                    (+ "A 'pk-detach block resulted in a "
+                       "hyperenvironment part that conflicted with "
+                       "others in the same 'pk-attach block.")]
+    (let unattached-lambdacalc call.body
+      (annotate 'pk-attached-lambdacalc
+        (list built-up-hyperenv unattached-lambdacalc)))))
+
+(mac pk-attach body
+  `(fn-pk-attach:fn () ,@body))
+
+(mac pk-attach-to (hyperenv . body)
+  `(fn-pk-attach (fn () ,@body) ,hyperenv))
+
+(def fn-pk-detach (body)
+  (unless dy.param-get.pk-attach-param*
+    (err:+ "A 'pk-detach block was entered outside the context of a "
+           "matching 'pk-attach."))
+  (let attached-lambdacalc (pk-noattach call.body)
+    (case type.attached-lambdacalc pk-attached-lambdacalc nil
+      (err:+ "The inside of a 'pk-detach block didn't result in a "
+             "'pk-attached-lambdacalc value."))
+    (let (hyperenv-part expr) rep.attached-lambdacalc
+      (.hyperenv-part:or dy.param-get.pk-attach-param*
+        (err:+ "A 'pk-detach block was exited outside the context of "
+               "a matching 'pk-attach."))
+      expr)))
+
+(mac pk-detach body
+  `(fn-pk-detach:fn () ,@body))
+
+(def pk-detachmap (seq)
+  (map [pk-detach _] seq))
+
+(def pk-attach-op (hyperenv)
+  (let attach-expr [pk-attach-to hyperenv pk-detach._]
+    (afn (op)
+      (annotate 'pk-compile-fork
+        (obj get   (memo:thunk:do.attach-expr:pk-fork-to-get op)
+             set   [do.attach-expr:pk-fork-to-set op _]
+             meta  (memo:thunk:do.attach-expr:pk-fork-to-meta op)
+             op    (fn (compiled-op body lexid static-hyperenv)
+                     (self:pk-fork-to-op op
+                       body lexid static-hyperenv)))))))
+
+
+(def pk-compile-leaf-from-thunk (staticenv getter)
+  (zap memo getter)
+  (annotate 'pk-compile-fork
+    (obj get   getter
+         set   [err:+ "An attempt was made to compile an ineligible "
+                      "form for setting."]
+         meta  getter
+         op    pk-staticenv-default-op-compiler.staticenv)))
+
+(def pk-compile-literal-from-thunk (compile-value staticenv)
+  (pk-compile-leaf-from-thunk staticenv
+    (thunk:pk-attach:annotate 'pk-lambdacalc-literal
+      (list:pk-noattach call.compile-value))))
+
+; The 'compile-op-and-body parameter should be a function that returns
+; a proper list of 'pk-attached-lambdacalc values representing the
+; function and arguments.
+(def pk-compile-call-from-thunk (compile-op-and-body op-compiler)
+  (zap memo compile-op-and-body)
+  (annotate 'pk-compile-fork
+    (obj get   (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call
+                 (pk-detachmap call.compile-op-and-body))
+         set   (let compile-set
+                      (memo:thunk:pk-attach:annotate
+                        'pk-lambdacalc-call-set
+                        (pk-detachmap call.compile-op-and-body))
+                 [pk-attach:annotate 'pk-lambdacalc-call
+                   (pk-detachmap:list call.compile-set _)])
+         meta  (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call-meta
+                 (pk-detachmap call.compile-op-and-body))
+         op    op-compiler)))
+
+(def pk-compile-fork-from-op (op-compiler)
+  (fn (hyped-varname)
+    (annotate 'pk-compile-fork
+      (obj get   (thunk:pk-attach:annotate 'pk-lambdacalc-var
+                   hyped-varname)
+           set   [pk-attach:annotate 'pk-lambdacalc-set
+                   (list hyped-varname pk-detach._)]
+           meta  (thunk:pk-attach:annotate 'pk-lambdacalc-var-meta
+                   hyped-varname)
+           op    op-compiler))))
+
+
+(def pk-function-call-compiler
+       (compiled-op body lexid static-hyperenv)
+  (pk-compile-call-from-thunk
+    (thunk:cons pk-fork-to-get.compiled-op
+      (map [pk-fork-to-get:pk-soup-compile _ lexid static-hyperenv]
+           otokens.body))
+    (pk-staticenv-default-op-compiler:pk-hyperenv-get
+      static-hyperenv lexid)))
+
 
 ; For efficiency, this assumes the argument is a character.
-(def pk-infix-id-char (x)
-  (~or pk-alpha-id-char.x (<= int.x 32)))
+(def pk-alpha-id-char (char)
+  (or alphadig.char (pos char "+-*/<=>") (< 255 int.char)))
 
-(def pk-string-identifier (x)
-  (case type.x string
-    (when (or (all pk-alpha-id-char x) (all pk-infix-id-char x))
-      (list sym.x))))
+; For efficiency, this assumes the argument is a character.
+(def pk-infix-id-char (char)
+  (~or pk-alpha-id-char.char (<= int.char 32)))
 
-(def pk-soup-identifier (x)
-  (case type.x pk-soup (only.pk-string-identifier soup->string.x)))
+; This assumes the first argument is a string.
+(def pk-string-identifier-with-env (string lexid env)
+  (when (or (all pk-alpha-id-char string)
+            (all pk-infix-id-char string))
+    (list (annotate 'pk-hyped-sym (list lexid sym.string)) env)))
 
-(mr:rule pk-soup-compile-tl (soup staticenv) expression
-  (pk-fork-to-meta:pk-soup-compile soup staticenv))
+; This assumes the first argument is a 'pk-soup value.
+(def pk-soup-identifier-with-env (soup lexid env)
+  (aif soup->string.soup
+    (pk-string-identifier-with-env it lexid env)
+      (~or (oi.olen> soup 1) oi.oempty.soup)
+    (let sip (oref soup 0)
+      (case type.sip pk-sip-hype-staticenv
+        (let (inner-lexid globalenv inner-soup) rep.sip
+          (pk-soup-identifier-with-env
+            inner-soup inner-lexid globalenv))))))
 
-(mr:rule pk-soup-compile (soup staticenv) one-sip
-  (iflet (sip) (and (oi.olen< soup 2)
-                    (no soup->string.soup)
-                    soup->list.soup)
-    (pk-sip-compile sip staticenv)
-    (do.fail "The word wasn't simply a single non-character.")))
+; This assumes the first argument is a 'pk-soup value.
+(def pk-soup-identifier (soup lexid)
+  (car:pk-soup-identifier-with-env soup lexid nil))
 
-(mr:rule pk-soup-compile (soup staticenv) identifier
-  (iflet (name) pk-soup-identifier.soup
-    (iflet (literal) (pk-staticenv-literal staticenv name)
-      (pk-compile-literal-from-thunk thunk.literal staticenv)
-      (pk-staticenv-get-compile-fork staticenv name))
+(mr:rule pk-soup-compile-tl (soup lexid static-hyperenv) expression
+  (pk-fork-to-meta:pk-soup-compile soup lexid static-hyperenv))
+
+(mr:rule pk-soup-compile (soup lexid static-hyperenv) one-sip
+  (when (or (oi.olen> soup 1) oi.oempty.soup soup->string.soup)
+    (do.fail "The word wasn't simply a single non-character."))
+  (pk-sip-compile (oref soup 0) lexid static-hyperenv))
+
+(mr:rule pk-soup-compile (soup lexid static-hyperenv) identifier
+  (iflet (hyped-sym env) (pk-soup-identifier-with-env soup lexid
+                           (pk-hyperenv-get static-hyperenv lexid))
+    (let name pk-hyped-sym-name.hyped-sym
+      (iflet (literal) (pk-staticenv-literal env name)
+        (pk-compile-literal-from-thunk thunk.literal env)
+        (pk-staticenv-get-compile-fork env hyped-sym)))
     (do.fail "The word wasn't an identifier.")))
 
-(mr:rule pk-soup-compile (soup staticenv) infix
+(mr:rule pk-soup-compile (soup lexid static-hyperenv) infix
   (iflet (left op right) (o-split-last-token soup
                            [~case type._ char pk-infix-id-char._])
     (if oi.oempty.left
       (do.fail:+ "The word started with its only infix operator, so "
                  "it wasn't an infix form.")
-      (ut:lets it (pk-soup-compile op staticenv)
-               it (pk-fork-to-op it left staticenv)
-                  (pk-fork-to-op it right staticenv)))
+      (ut:lets it (pk-soup-compile op lexid static-hyperenv)
+               it (pk-fork-to-op it left lexid static-hyperenv)
+                  (pk-fork-to-op it right lexid static-hyperenv)))
     (do.fail "The word didn't contain an infix operator.")))
 
-(mr:rule pk-soup-compile (soup staticenv) prefix
+(mr:rule pk-soup-compile (soup lexid static-hyperenv) prefix
   (let (op bodies) (o-rtrim soup rc.a-!pk-bracketed-soup)
     (unless (or (and oi.oempty.op (oi.olen> bodies 1))
-                (and pk-soup-identifier.op (oi.olen> bodies 0)))
+                (and (pk-soup-identifier op lexid)
+                     (oi.olen> bodies 0)))
       (do.fail:+ "The word wasn't a series of bracketed bodies "
                  "preceded by a bracket form or an identifier."))
     (zap soup->list bodies)
     (= op (if oi.oempty.op
-            (pk-sip-compile pop.bodies staticenv)
-            (pk-soup-compile op staticenv)))
+            (pk-sip-compile pop.bodies lexid static-hyperenv)
+            (pk-soup-compile op lexid static-hyperenv)))
     (each body (map car:rep bodies)
-      (zap [pk-fork-to-op _ body staticenv] op))
+      (zap [pk-fork-to-op _ body lexid static-hyperenv] op))
     op))
 
-(rc:ontype pk-sip-compile (staticenv)
+(rc:ontype pk-sip-compile (lexid static-hyperenv)
              pk-bracketed-soup pk-bracketed-soup
   (zap car:rep self)
   (iflet (margin op rest) o-split-first-token.self
-    (pk-fork-to-op (pk-soup-compile op staticenv) rest staticenv)
+    (let compiled-op (pk-soup-compile op lexid static-hyperenv)
+      (pk-fork-to-op compiled-op rest lexid static-hyperenv))
     (do.fail "The syntax was an empty pair of brackets.")))
+
+(rc:ontype pk-sip-compile (lexid static-hyperenv)
+             pk-sip-hype-staticenv pk-sip-hype-staticenv
+  (withs ((inner-lexid globalenv soup) rep.self
+          tokens otokens.soup)
+    (unless single.tokens
+      (do.fail:+ "The syntax was a 'pk-sip-hype-staticenv without "
+                 "exactly one word in it."))
+    (let global-hyperenv (pk-make-hyperenv inner-lexid globalenv)
+      (pk-attach-op.global-hyperenv:pk-soup-compile
+        car.tokens
+        inner-lexid
+        (pk-hyperenv-overlap global-hyperenv static-hyperenv)))))
 
 
 (rc:ontype pk-call args fn fn
@@ -911,28 +1209,39 @@
 
 (mac def-pk-eval (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self tagged-self dynenv fail) ,@body)
-       (,rc!ontype pk-eval-meta (dynenv) ,type ,type
-         (pk-meta result (,g-backing-fn rep.self self dynenv fail)))
-       (,rc!ontype pk-eval (dynenv) ,type ,type
-         (,g-backing-fn rep.self self dynenv fail)))))
+    `(let ,g-backing-fn
+            (fn (self tagged-self lexid dyn-hyperenv dynenv fail)
+              ,@body)
+       (,rc!ontype pk-eval-meta (lexid dyn-hyperenv) ,type ,type
+         (pk-meta result
+           (,g-backing-fn rep.self self lexid dyn-hyperenv
+                          (pk-hyperenv-get dyn-hyperenv lexid) fail)))
+       (,rc!ontype pk-eval (lexid dyn-hyperenv) ,type ,type
+         (,g-backing-fn rep.self self lexid dyn-hyperenv
+                        (pk-hyperenv-get dyn-hyperenv lexid) fail)))))
 
 (mac def-pk-eval-meta (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn (fn (self tagged-self dynenv fail) ,@body)
-       (,rc!ontype pk-eval-meta (dynenv) ,type ,type
-         (,g-backing-fn rep.self self dynenv fail))
-       (,rc!ontype pk-eval (dynenv) ,type ,type
-         (pk-demeta (,g-backing-fn rep.self self dynenv fail))))))
+    `(let ,g-backing-fn
+            (fn (self tagged-self lexid dyn-hyperenv dynenv fail)
+              ,@body)
+       (,rc!ontype pk-eval-meta (lexid dyn-hyperenv) ,type ,type
+         (,g-backing-fn rep.self self lexid dyn-hyperenv
+                        (pk-hyperenv-get dyn-hyperenv lexid) fail))
+       (,rc!ontype pk-eval (lexid dyn-hyperenv) ,type ,type
+         (pk-demeta
+           (,g-backing-fn rep.self self lexid dyn-hyperenv
+                          (pk-hyperenv-get dyn-hyperenv lexid)
+                          fail))))))
 
 (def-pk-eval pk-lambdacalc-call
-  (apply pk-call (map [pk-eval _ dynenv] self)))
+  (apply pk-call (map [pk-eval _ lexid dyn-hyperenv] self)))
 
 (def-pk-eval pk-lambdacalc-call-set
-  (apply pk-call-set (map [pk-eval _ dynenv] self)))
+  (apply pk-call-set (map [pk-eval _ lexid dyn-hyperenv] self)))
 
 (def-pk-eval-meta pk-lambdacalc-call-meta
-  (apply pk-call-meta (map [pk-eval _ dynenv] self)))
+  (apply pk-call-meta (map [pk-eval _ lexid dyn-hyperenv] self)))
 
 (def-pk-eval pk-lambdacalc-literal
   car.self)
@@ -941,40 +1250,48 @@
   car.self)
 
 (def-pk-eval pk-lambdacalc-var
-  (pk-dynenv-get dynenv self))
+  (pk-dyn-hyperenv-get dyn-hyperenv self))
 
 (def-pk-eval-meta pk-lambdacalc-var-meta
-  (pk-dynenv-get-meta dynenv self))
+  (pk-dyn-hyperenv-get-meta dyn-hyperenv self))
 
 (def-pk-eval pk-lambdacalc-set
-  (pk-dynenv-set dynenv self.0 (pk-eval self.1 dynenv)))
+  (pk-dyn-hyperenv-set
+    dyn-hyperenv self.0 (pk-eval self.1 lexid dyn-hyperenv)))
 
 (def-pk-eval pk-lambdacalc-set-meta
-  (pk-dynenv-set-meta dynenv self.0 (pk-eval self.1 dynenv)))
+  (pk-dyn-hyperenv-set-meta
+    dyn-hyperenv self.0 (pk-eval self.1 lexid dyn-hyperenv)))
 
 (def-pk-eval pk-lambdacalc-demeta
-  (pk-eval-meta car.self dynenv))
+  (pk-eval-meta car.self lexid dyn-hyperenv))
 
-(rc:ontype pk-eval (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval pk-fork-to-get.self dynenv))
+; TODO: See if this 'pk-hyperenv-combine call can be replaced with
+; more comprehensive subexpression attachment. Specifically,
+; 'pk-compile-fork-from-op would use 'pk-attach-to.
+(def-pk-eval-meta pk-attached-lambdacalc
+  (pk-eval-meta self.1 lexid
+    (or (pk-hyperenv-combine dyn-hyperenv self.0)
+        (err:+ "A 'pk-attached-lambdacalc was evaluated in a dynamic "
+               "hyperenvironment that conflicted with its own."))))
 
-(rc:ontype pk-eval (env) pk-soup pk-soup
-  (pk-eval (pk-soup-compile self env) env))
+(def-pk-eval-meta pk-compile-fork
+  (pk-eval-meta pk-fork-to-meta.tagged-self lexid dyn-hyperenv))
 
-(rc:ontype pk-eval-meta (dynenv) pk-compile-fork pk-compile-fork
-  (pk-eval-meta pk-fork-to-meta.self dynenv))
+(def-pk-eval-meta pk-soup
+  (pk-eval-meta (pk-soup-compile tagged-self lexid dyn-hyperenv)
+    lexid dyn-hyperenv))
 
-(rc:ontype pk-eval-meta (env) pk-soup pk-soup
-  (pk-eval-meta (pk-soup-compile self env) env))
-
-(rc:ontype pk-eval-tl (env) pk-soup pk-soup
-  (pk-eval-meta (pk-soup-compile-tl self env) env))
+(rc:ontype pk-eval-tl (lexid hyperenv) pk-soup pk-soup
+  (pk-eval-meta (pk-soup-compile-tl self lexid hyperenv)
+    lexid hyperenv))
 
 
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
 
-(= pk-replenv* (let rep (table) (annotate 'pk-ad-hoc-env thunk.rep)))
+(= pk-repllexid* 'pk-repllexid*)
+(= pk-replenv* (pk-make-ad-hoc-env))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is
@@ -992,7 +1309,7 @@
     (+ "" error)
     (err "The argument to 'error-message wasn't an error.")))
 
-(def pktl (env str act-on report-error prompt)
+(def pktl (lexid env str act-on report-error prompt)
   (zap newline-normalizer str)
   
   ; NOTE: Jarc's 'on-err suppresses escape continuations, so
@@ -1008,7 +1325,7 @@
   (car:catch:until:only.throw:on-err
     [do (do.report-error error-message._) nil]
     (fn () do.prompt.str                        ; Wait for more input.
-           (let meta (pk-staticenv-read-eval-tl env str)
+           (let meta (pk-staticenv-read-eval-tl env lexid str)
              (iflet (action) rep.meta!action
                pk-call.action
                do.act-on.meta)
@@ -1020,7 +1337,8 @@
 (def pkrepl ((o str (errsafe:stdin)))
   (when (and no.str jv.jclass!rainbow-functions-IO)
     (= str (jvm!rainbow-functions-IO-stdIn)))
-  (pktl pk-replenv*
+  (pktl pk-repllexid*
+        pk-replenv*
         str
         [let val pk-demeta._
           (on-err [prn "Error writing: " error-message._]
@@ -1034,11 +1352,17 @@
                     throw.t))
           (pr "pk> ")]))
 
-(def pkdo (env str)
+(def pkdo (lexid env str)
   ; Don't display any results, raise all errors, and don't show any
   ; prompts.
-  (pktl env str [do] err [do]))
+  (pktl lexid env str [do] err [do]))
 
 ; NOTE: Rainbow doesn't like [].
-(def pkload (env filename)
-  (w/infile str filename (pkdo env str)))
+(def pkload (lexid env filename)
+  (w/infile str filename (pkdo lexid env str)))
+
+; This is just a convenience for compiling things at the REPL.
+(def pkcomp (str)
+  ; NOTE: Rainbow treats a&b.c as (andf a b.c).
+  (pk-compile-to-get:pk-compile (start-word&finish-bracket-word str)
+    pk-repllexid* (pk-make-hyperenv pk-repllexid* pk-replenv*)))

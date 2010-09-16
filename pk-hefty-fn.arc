@@ -37,8 +37,8 @@
 ; closure as though it's a 'pk-lambdacalc-thin-fn expression, but then
 ; it's packed up into a 'pk-hefty-fn value which contains the Arc
 ; closure, the 'pk-lambdacalc-hefty-fn expression itself, and even a
-; reference to the current dynamic environment. The point of this is
-; to make it possible to serialize the closure or compile it to an
+; reference to the current dynamic hyperenvironment. The point of this
+; is to make it possible to serialize the closure or compile it to an
 ; even more efficient form.
 
 
@@ -47,11 +47,11 @@
 ; (pk-call self . args)  ; external rule
 ;
 ; < some external rules using 'def-pk-eval >
-; (pk-captures-env self)                               ; external rule
+; (pk-captures-hyperenv self)                          ; external rule
 ; < some external rules using 'def-pk-optimize-expr >
 ;
-; (pk-hefty-fn-rest-compiler compiled-op body staticenv)
-; (pk-hefty-fn-compiler compiled-op body staticenv)
+; (pk-hefty-fn-rest-compiler compiled-op body lexid static-hyperenv)
+; (pk-hefty-fn-compiler compiled-op body lexid static-hyperenv)
 ;
 ; Penknife  [hf [args$&] body&]
 ; Penknife  [hf* [args$&] restarg$ body&]
@@ -70,9 +70,9 @@
 ;                    than evaluating the body directly.
 ;   rep._!expr:      The 'pk-lambdacalc-hefty-fn expression which
 ;                    returned this object.
-;   rep._!dynenv:    The dynamic environment that existed when the
-;                    'pk-lambdacalc-hefty-fn expression was evaluated
-;                    to return this object.
+;   rep._!hyperenv:  The dynamic hyperenvironment that existed when
+;                    the 'pk-lambdacalc-hefty-fn expression was
+;                    evaluated to return this object.
 
 
 (rc:ontype pk-call args pk-hefty-fn pk-hefty-fn
@@ -81,38 +81,37 @@
 
 (def-pk-eval pk-lambdacalc-hefty-fn
   (annotate 'pk-hefty-fn
-    (obj compiled  (pk-eval self dynenv)
+    (obj compiled  (pk-eval self lexid dyn-hyperenv)
          expr      tagged-self
-         dynenv    dynenv)))
+         hyperenv  dyn-hyperenv)))
 
-(rc:ontype pk-captures-env ()
+(rc:ontype pk-captures-hyperenv ()
              pk-lambdacalc-hefty-fn pk-lambdacalc-hefty-fn
   t)
 
 (def-pk-optimize-expr pk-lambdacalc-hefty-fn
   `(annotate 'pk-hefty-fn
-     (obj compiled  ,(pk-optimize-expr self dynenv local-lex env-lex)
+     (obj compiled  ,(pk-optimize-expr
+                       self lexid dyn-hyperenv local-lex env-lex)
           expr      (',thunk.tagged-self)
-          dynenv    _)))
+          hyperenv  _)))
 
 
-(def pk-hefty-fn-rest-compiler (compiled-op body staticenv)
-  (pk-compile-leaf-from-thunk staticenv
-    (thunk:annotate 'pk-lambdacalc-hefty-fn
-      (pk-fork-to-get:pk-thin-fn-rest-compiler
-        compiled-op body staticenv))))
+(def pk-hefty-fn-rest-compiler
+       (compiled-op body lexid static-hyperenv)
+  (pk-compile-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+    (thunk:pk-attach:annotate 'pk-lambdacalc-hefty-fn
+      (pk-detach:pk-fork-to-get:pk-thin-fn-rest-compiler
+        compiled-op body lexid static-hyperenv))))
 
-(def pk-hefty-fn-compiler (compiled-op body staticenv)
-  (pk-compile-leaf-from-thunk staticenv
-    (thunk:annotate 'pk-lambdacalc-hefty-fn
-      (pk-fork-to-get:pk-thin-fn-compiler
-        compiled-op body staticenv))))
+(def pk-hefty-fn-compiler (compiled-op body lexid static-hyperenv)
+  (pk-compile-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+    (thunk:pk-attach:annotate 'pk-lambdacalc-hefty-fn
+      (pk-detach:pk-fork-to-get:pk-thin-fn-compiler
+        compiled-op body lexid static-hyperenv))))
 
 
-(pk-dynenv-set-meta pk-replenv* 'hf
-  (pk-meta compile-fork (list:pk-compile-fork-from-op
-                          pk-hefty-fn-compiler)))
+(pk-dynenv-set-meta pk-replenv* 'hf pk-wrap-op.pk-hefty-fn-compiler)
 
 (pk-dynenv-set-meta pk-replenv* 'hf*
-  (pk-meta compile-fork (list:pk-compile-fork-from-op
-                          pk-hefty-fn-rest-compiler)))
+  pk-wrap-op.pk-hefty-fn-rest-compiler)
