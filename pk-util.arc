@@ -399,11 +399,8 @@
                        (err:+ "The second body of a \"'\" didn't "
                               "have exactly one word in it."))
                      (let compiled-inner-op
-                            ; TODO: This seems like it should use
-                            ; the second environment rather than the
-                            ; first one. Figure it out.
                             (pk-soup-compile
-                              car.token-args lexid static-hyperenv)
+                              car.token-args lexid2 static-hyperenv2)
                        (pk-fork-to-op compiled-inner-op
                          body lexid static-hyperenv))))))))
 
