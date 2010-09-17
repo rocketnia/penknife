@@ -188,40 +188,35 @@
 (mac def-pk-optimize-expr (type . body)
   (w/uniq g-backing-fn
     `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv
-                             local-lex env-lex dynenv fail)
+                             local-lex env-lex fail)
                           ,@body)
        (,rc!ontype pk-optimize-expr
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          (,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
-                        env-lex (pk-hyperenv-get dyn-hyperenv lexid)
-                        fail))
+                        env-lex fail))
        (,rc!ontype pk-optimize-expr-meta
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          `(pk-meta result
-            ,(,g-backing-fn
-               rep.self self lexid dyn-hyperenv local-lex env-lex
-               (pk-hyperenv-get dyn-hyperenv lexid) fail))))))
+            ,(,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
+                            env-lex fail))))))
 
 (mac def-pk-optimize-expr-meta (type . body)
   (w/uniq g-backing-fn
     `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv
-                             local-lex env-lex dynenv fail)
+                             local-lex env-lex fail)
                           ,@body)
        (,rc!ontype pk-optimize-expr
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
-         `(pk-demeta
-            ,(,g-backing-fn
-               rep.self self lexid dyn-hyperenv local-lex env-lex
-               (pk-hyperenv-get dyn-hyperenv lexid) fail)))
+         `(pk-demeta ,(,g-backing-fn rep.self self lexid dyn-hyperenv
+                                     local-lex env-lex fail)))
        (,rc!ontype pk-optimize-expr-meta
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          (,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
-                        env-lex (pk-hyperenv-get dyn-hyperenv lexid)
-                        fail)))))
+                        env-lex fail)))))
 
 (def-pk-optimize-expr pk-lambdacalc-call
   `(pk-call

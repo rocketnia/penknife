@@ -1241,30 +1241,23 @@
 
 (mac def-pk-eval (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn
-            (fn (self tagged-self lexid dyn-hyperenv dynenv fail)
-              ,@body)
+    `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv fail)
+                          ,@body)
        (,rc!ontype pk-eval-meta (lexid dyn-hyperenv) ,type ,type
          (pk-meta result
-           (,g-backing-fn rep.self self lexid dyn-hyperenv
-                          (pk-hyperenv-get dyn-hyperenv lexid) fail)))
+           (,g-backing-fn rep.self self lexid dyn-hyperenv fail)))
        (,rc!ontype pk-eval (lexid dyn-hyperenv) ,type ,type
-         (,g-backing-fn rep.self self lexid dyn-hyperenv
-                        (pk-hyperenv-get dyn-hyperenv lexid) fail)))))
+         (,g-backing-fn rep.self self lexid dyn-hyperenv fail)))))
 
 (mac def-pk-eval-meta (type . body)
   (w/uniq g-backing-fn
-    `(let ,g-backing-fn
-            (fn (self tagged-self lexid dyn-hyperenv dynenv fail)
-              ,@body)
+    `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv fail)
+                          ,@body)
        (,rc!ontype pk-eval-meta (lexid dyn-hyperenv) ,type ,type
-         (,g-backing-fn rep.self self lexid dyn-hyperenv
-                        (pk-hyperenv-get dyn-hyperenv lexid) fail))
+         (,g-backing-fn rep.self self lexid dyn-hyperenv fail))
        (,rc!ontype pk-eval (lexid dyn-hyperenv) ,type ,type
          (pk-demeta
-           (,g-backing-fn rep.self self lexid dyn-hyperenv
-                          (pk-hyperenv-get dyn-hyperenv lexid)
-                          fail))))))
+           (,g-backing-fn rep.self self lexid dyn-hyperenv fail))))))
 
 (def-pk-eval pk-lambdacalc-call
   (apply pk-call (map [pk-eval _ lexid dyn-hyperenv] self)))

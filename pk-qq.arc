@@ -325,7 +325,7 @@
               result-hyperenv static-hyperenv)))))))
 
 (def-pk-eval pk-lambdacalc-mc
-  (pk-wrapmc dynenv self.0 self.1
+  (pk-wrapmc (pk-hyperenv-get dyn-hyperenv lexid) self.0 self.1
     (pk-eval self.2 lexid dyn-hyperenv)))
 
 (rc:ontype pk-captures-hyperenv () pk-lambdacalc-mc pk-lambdacalc-mc
