@@ -68,8 +68,8 @@
 ; (pk-thin-fn-rest-compiler compiled-op body lexid static-hyperenv)
 ; (pk-thin-fn-compiler compiled-op body lexid static-hyperenv)
 ;
-; Penknife  [tf [args$&] body&]
-; Penknife  [tf* [args$&] restarg$ body&]
+; Penknife  [tf [args$&] body&]            ; syntax
+; Penknife  [tf* [args$&] restarg$ body&]  ; syntax
 ;
 ;
 ; Type listing:

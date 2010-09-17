@@ -38,12 +38,14 @@
 
 ; Declaration listing:
 ;
-; [macq* name$ qq$ [args$&] rest$ body&]
-; [macq name$ qq$ [args$&] body&]
-; [mac* name$ [args$&] rest$ body&]
-; [mac name$ [args$&] body&]
-; [fun* name: [args$&] rest$ body&]
-; [fun name: [args$&] body&]
+; [. result]                              ; syntax
+;
+; [macq* name$ qq$ [args$&] rest$ body&]  ; syntax
+; [macq name$ qq$ [args$&] body&]         ; syntax
+; [mac* name$ [args$&] rest$ body&]       ; syntax
+; [mac name$ [args$&] body&]              ; syntax
+; [fun* name: [args$&] rest$ body&]       ; syntax
+; [fun name: [args$&] body&]              ; syntax
 ;
 ; [idfn result]
 ; [list elements&]
@@ -53,6 +55,9 @@
 ; [enmeta meta]                 ; command
 ; [meta= var$ val]
 ; [let var$ val body&]
+
+
+[= [meta .] [wrap-op:hm qq [result] result]]
 
 
 [= macq*'meta [wrap-op:hm* our-qq [name qq args rest] body

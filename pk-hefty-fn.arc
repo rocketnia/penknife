@@ -53,8 +53,8 @@
 ; (pk-hefty-fn-rest-compiler compiled-op body lexid static-hyperenv)
 ; (pk-hefty-fn-compiler compiled-op body lexid static-hyperenv)
 ;
-; Penknife  [hf [args$&] body&]
-; Penknife  [hf* [args$&] restarg$ body&]
+; Penknife  [hf [args$&] body&]            ; syntax
+; Penknife  [hf* [args$&] restarg$ body&]  ; syntax
 ;
 ;
 ; Type listing:

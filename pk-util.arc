@@ -98,10 +98,6 @@
 ; Penknife  [meta var!]
 ; Penknife  [= [meta var$] val]
 ;
-; (pk-infix-call-compiler compiled-op body lexid static-hyperenv)
-; Penknife  [. result]        ; syntax
-; Penknife  [idfn[.] result]
-;
 ; (pk-infix-inverted-call-compiler
 ;   compiled-op body lexid static-hyperenv)
 ; Penknife  ['[body~] op]          ; syntax
@@ -373,19 +369,6 @@
   (pk-meta result         idfn
            compile-fork   (list:pk-compile-fork-from-op
                             pk-demeta-compiler)))
-
-
-(def pk-infix-call-compiler (compiled-op body lexid static-hyperenv)
-  (let token-args otokens.body
-    (unless single.token-args
-      (err "A \".\" body didn't have exactly one word in it."))
-    (pk-soup-compile car.token-args lexid static-hyperenv)))
-
-; NOTE: Both Rainbow *and* Jarc consider (string '|.|) to be "|.|".
-(pk-dynenv-set-meta pk-replenv* (sym ".")
-  (pk-meta result        idfn
-           compile-fork  (list:pk-compile-fork-from-op
-                           pk-infix-call-compiler)))
 
 
 (def pk-infix-inverted-call-compiler
