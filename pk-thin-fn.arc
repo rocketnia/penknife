@@ -65,6 +65,7 @@
 ;
 ; < some external rules using 'def-pk-eval >
 ;
+; (pk-finish-fn args rest body meta lexid static-hyperenv)
 ; (pk-thin-fn-rest-compiler compiled-op body lexid static-hyperenv)
 ; (pk-thin-fn-compiler compiled-op body lexid static-hyperenv)
 ;
@@ -345,66 +346,42 @@
                        ,@body))))))))
 
 
+(def pk-finish-fn (args rest body meta lexid static-hyperenv)
+  (let local-static-hyperenv
+         (pk-hyperenv-shadow-assoclist static-hyperenv
+           (map [list _ meta] (join args rest)))
+    (pk-attach:annotate 'pk-lambdacalc-thin-fn
+      (list args rest
+        (map [pk-detach:pk-fork-to-get:pk-soup-compile
+               _ lexid local-static-hyperenv]
+             body)))))
+
 (def pk-thin-fn-rest-compiler (compiled-op body lexid static-hyperenv)
   (let token-args otokens.body
     (unless (<= 3 len.token-args)
       (err:+ "A thin-fn-rest body didn't have at least three words "
              "in it."))
     (withs ((args rest . body) token-args
-            argenvs (pk-make-hyperenv)
-            shove [iflet (hyped-varname env) _
-                    (do (pk-hyperenv-shove argenvs
-                          (pk-make-hyperenv
-                            pk-hyped-sym-lexid.hyped-varname env)
-                          (+ "Two fn-rest parameters had conflicting "
-                             "lexid meanings."))
-                        hyped-varname)
-                    (err "A fn-rest parameter wasn't an identifier.")]
-            global-staticenv
-              (pk-hyperenv-get-global static-hyperenv lexid)
-            args (map shove
-                   (pk-identifier-list args lexid global-staticenv))
-            rest (do.shove:pk-soup-identifier-with-env
-                   rest lexid global-staticenv))
+            check
+              [or _ (err "A fn-rest parameter wasn't an identifier.")]
+            args (map check (pk-identifier-list args lexid))
+            rest (do.check:pk-soup-identifier rest lexid))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
-        (thunk:let local-static-hyperenv
-                     (pk-hyperenv-shadow-assoclist static-hyperenv
-                       (map [list _ pk-nometa*] (cons rest args)))
-          (pk-attach:annotate 'pk-lambdacalc-thin-fn
-            (list args list.rest
-              (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                     _ lexid local-static-hyperenv]
-                   body))))))))
+        (thunk:pk-finish-fn
+          args list.rest body pk-nometa* lexid static-hyperenv)))))
 
 (def pk-thin-fn-compiler (compiled-op body lexid static-hyperenv)
   (let token-args otokens.body
     (unless (<= 2 len.token-args)
       (err "A thin-fn body didn't have at least two words in it."))
     (withs ((args . body) token-args
-            argenvs (pk-make-hyperenv)
-            shove [iflet (hyped-varname env) _
-                    (do (pk-hyperenv-shove argenvs
-                          (pk-make-hyperenv
-                            pk-hyped-sym-lexid.hyped-varname env)
-                          (+ "Two fn parameters had conflicting "
-                             "lexid meanings."))
-                        hyped-varname)
-                    (err "A fn parameter wasn't an identifier.")]
-            global-staticenv
-              (pk-hyperenv-get-global static-hyperenv lexid)
-            args (map shove
-                   (pk-identifier-list args lexid global-staticenv)))
+            check [or _ (err "A fn parameter wasn't an identifier.")]
+            args (map check (pk-identifier-list args lexid)))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
-        (thunk:let local-static-hyperenv
-                     (pk-hyperenv-shadow-assoclist static-hyperenv
-                       (map [list _ pk-nometa*] args))
-          (pk-attach:annotate 'pk-lambdacalc-thin-fn
-            (list args nil
-              (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                     _ lexid local-static-hyperenv]
-                   body))))))))
+        (thunk:pk-finish-fn
+          args nil body pk-nometa* lexid static-hyperenv)))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tf pk-wrap-op.pk-thin-fn-compiler)

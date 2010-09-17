@@ -1111,7 +1111,7 @@
 (def pk-soup-identifier (soup lexid)
   (car:pk-soup-identifier-with-env soup lexid nil))
 
-(def pk-identifier-list (soup lexid env)
+(def pk-identifier-list (soup lexid)
   (zap otokens soup)
   (unless single.soup
     (err "An identifier list wasn't exactly one word."))
@@ -1121,11 +1121,10 @@
   (zap [oref _ 0] soup)
   (case type.soup pk-sip-hype-staticenv
     (let (inner-lexid globalenv inner-soup) rep.soup
-      (pk-identifier-list inner-soup inner-lexid globalenv))
+      (pk-identifier-list inner-soup inner-lexid))
     (do (case type.soup pk-bracketed-soup nil
           (err "An identifier list wasn't a 'pk-bracketed-soup."))
-        (map [pk-soup-identifier-with-env _ lexid env]
-             (otokens rep.soup.0)))))
+        (map [pk-soup-identifier _ lexid] (otokens rep.soup.0)))))
 
 (mr:rule pk-soup-compile-tl (soup lexid static-hyperenv) expression
   (pk-fork-to-meta:pk-soup-compile soup lexid static-hyperenv))
