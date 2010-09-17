@@ -371,12 +371,11 @@
         (thunk:let local-static-hyperenv
                      (pk-hyperenv-shadow-assoclist static-hyperenv
                        (map [list _ pk-nometa*] (cons rest args)))
-          (pk-attach-to argenvs
-            (annotate 'pk-lambdacalc-thin-fn
-              (list args list.rest
-                (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                       _ lexid local-static-hyperenv]
-                     body)))))))))
+          (pk-attach:annotate 'pk-lambdacalc-thin-fn
+            (list args list.rest
+              (map [pk-detach:pk-fork-to-get:pk-soup-compile
+                     _ lexid local-static-hyperenv]
+                   body))))))))
 
 (def pk-thin-fn-compiler (compiled-op body lexid static-hyperenv)
   (let token-args otokens.body
@@ -401,12 +400,11 @@
         (thunk:let local-static-hyperenv
                      (pk-hyperenv-shadow-assoclist static-hyperenv
                        (map [list _ pk-nometa*] args))
-          (pk-attach-to argenvs
-            (annotate 'pk-lambdacalc-thin-fn
-              (list args nil
-                (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                       _ lexid local-static-hyperenv]
-                     body)))))))))
+          (pk-attach:annotate 'pk-lambdacalc-thin-fn
+            (list args nil
+              (map [pk-detach:pk-fork-to-get:pk-soup-compile
+                     _ lexid local-static-hyperenv]
+                   body))))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tf pk-wrap-op.pk-thin-fn-compiler)

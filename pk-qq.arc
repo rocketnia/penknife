@@ -318,9 +318,7 @@
           (unless single.result-soup
             (err:+ "The result of a macro didn't contain exactly one "
                    "word."))
-          (pk-attach-op.result-hyperenv:pk-soup-compile
-            car.result-soup
-            result-lexid
+          (pk-soup-compile car.result-soup result-lexid
             (pk-hyperenv-overlap
               result-hyperenv static-hyperenv)))))))
 
@@ -366,15 +364,14 @@
                        (pk-hyperenv-shadow-assoclist static-hyperenv
                          (map [list _ pk-qqmeta*]
                            (cons qq (cons rest args))))
-            (pk-attach-to argenvs
-              (annotate 'pk-lambdacalc-mc
-                (list len.args t
-                  (pk-detach:do.build-fn:pk-attach:annotate
-                    'pk-lambdacalc-thin-fn
-                    (list (join list.qq args list.rest) nil
-                      (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                             _ lexid local-static-hyperenv]
-                           body))))))))))))
+            (pk-attach:annotate 'pk-lambdacalc-mc
+              (list len.args t
+                (pk-detach:do.build-fn:pk-attach:annotate
+                  'pk-lambdacalc-thin-fn
+                  (list (join list.qq args list.rest) nil
+                    (map [pk-detach:pk-fork-to-get:pk-soup-compile
+                           _ lexid local-static-hyperenv]
+                         body)))))))))))
 
 (def pk-mc-compiler-for (build-fn)
   (fn (compiled-op body lexid static-hyperenv)
@@ -402,15 +399,14 @@
           (thunk:let local-static-hyperenv
                        (pk-hyperenv-shadow-assoclist static-hyperenv
                          (map [list _ pk-qqmeta*] (cons qq args)))
-            (pk-attach-to argenvs
-              (annotate 'pk-lambdacalc-mc
-                (list len.args nil
-                  (pk-detach:do.build-fn:pk-attach:annotate
-                    'pk-lambdacalc-thin-fn
-                    (list (cons qq args) nil
-                      (map [pk-detach:pk-fork-to-get:pk-soup-compile
-                             _ lexid local-static-hyperenv]
-                           body))))))))))))
+            (pk-attach:annotate 'pk-lambdacalc-mc
+              (list len.args nil
+                (pk-detach:do.build-fn:pk-attach:annotate
+                  'pk-lambdacalc-thin-fn
+                  (list (cons qq args) nil
+                    (map [pk-detach:pk-fork-to-get:pk-soup-compile
+                           _ lexid local-static-hyperenv]
+                         body)))))))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tm

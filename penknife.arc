@@ -169,7 +169,6 @@
 ; (fn-pk-detach body)
 ; (pk-detach . body)              ; macro
 ; (pk-detachmap seq)
-; (pk-attach-op hyperenv)
 ;
 ; (pk-compile-leaf-from-thunk staticenv getter)
 ; (pk-compile-literal-from-thunk compile-value staticenv)
@@ -1025,17 +1024,6 @@
 (def pk-detachmap (seq)
   (map [pk-detach _] seq))
 
-(def pk-attach-op (hyperenv)
-  (let attach-expr [pk-attach-to hyperenv pk-detach._]
-    (afn (op)
-      (annotate 'pk-compile-fork
-        (obj get   (memo:thunk:do.attach-expr:pk-fork-to-get op)
-             set   [do.attach-expr:pk-fork-to-set op _]
-             meta  (memo:thunk:do.attach-expr:pk-fork-to-meta op)
-             op    (fn (compiled-op body lexid static-hyperenv)
-                     (self:pk-fork-to-op op
-                       body lexid static-hyperenv)))))))
-
 
 (def pk-compile-leaf-from-thunk (staticenv getter)
   (zap memo getter)
@@ -1207,9 +1195,7 @@
       (do.fail:+ "The syntax was a 'pk-sip-hype-staticenv without "
                  "exactly one word in it."))
     (let global-hyperenv (pk-make-hyperenv inner-lexid globalenv)
-      (pk-attach-op.global-hyperenv:pk-soup-compile
-        car.tokens
-        inner-lexid
+      (pk-soup-compile car.tokens inner-lexid
         (pk-hyperenv-overlap global-hyperenv static-hyperenv)))))
 
 
