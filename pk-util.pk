@@ -60,40 +60,130 @@
 [= [meta .] [wrap-op:hm qq [result] result]]
 
 
+; TODO: Consider removing the following "arc.prn.q[...]" lines when
+; the Penknife compilation phase isn't so ridiculously slow. (This
+; probably has to do with the use of rulebooks.)
+
+
+arc.prn.q[Defining macq*.]
 [= macq*'meta [wrap-op:hm* our-qq [name qq args rest] body
                 our-qq.[= meta.\,name [wrap-op:hm* \,qq \,args \,rest
                                         \,body]]]]
 
+arc.prn.q[Defining macq.]
 [macq* macq our-qq [name qq args] body
   our-qq.[= meta.\,name [wrap-op:hm \,qq \,args \,body]]]
 
+arc.prn.q[Defining mac*.]
 [macq* mac* qq [name args rest] body
   qq.[macq* \,name \,body.qq \,args \,rest \,body]]
 
+arc.prn.q[Defining mac.]
 [mac* mac [name args] body
   qq.[macq \,name \,body.qq \,args \,body]]
 
+arc.prn.q[Defining fun*.]
 [mac* fun* [name args rest] body
   qq.[= \,name [hf* \,args \,rest \,body]]]
 
+arc.prn.q[Defining fun.]
 [mac* fun [name args] body
   qq.[= \,name [hf \,args \,body]]]
 
 
+arc.prn.q[Defining idfn, list, nil, and join.]
 [fun idfn [result] result]
 [fun* list [] elements elements]
 [= nil list.]
 [fun* join [] lists [apply + nil lists]]
 
+arc.prn.q[Defining `.]
 [fun* ` [] args-a
   [hf [func]
     [hf* [] args-b
       [apply func [join args-a args-b]]]]]
 
+arc.prn.q[Defining enmeta.]
 [= enmeta command.idfn]
 
+arc.prn.q[Defining meta=.]
 [mac meta= [var val]
   qq.[= meta.\,var meta.\,val]]
 
+arc.prn.q[Defining let.]
 [mac* let [var val] body
   qq.[[tf [\,var] \,body] \,val]]
+
+
+; TODO: Document the following. Also, figure out which of these
+; utilities should be kept, and what things in particular need to be
+; implemented on the Arc side so that we don't have so many [arc ...]
+; forms here.
+
+
+arc.prn.q[Defining err and defuse.]
+[= err arc.pk-err]
+[= defuse arc.pk-defuse]
+
+arc.prn.q[Defining tf0.]
+[mac* tf0 [] body
+  qq.[tf [] \,body]]
+
+arc.prn.q[Defining hf1.]
+[mac* hf1 [] body
+  qq.[hf [\,body.it] \,body]]
+
+arc.prn.q[Defining demeta, fn-if, if, do, when, and unless.]
+[= demeta arc.pk-demeta]
+[= fn-if [arc (fn (test then else)
+                (pk-call:if test then else))]]
+[mac if [test then else]
+  qq.[fn-if \,test tf0.\,then tf0.\,else]]
+[mac* do [] body
+  qq.[tf0.\,body]]
+[mac* when [test] body
+  qq.[if \,test [do \,body] nil]]
+[mac* unless [test] body
+  qq.[if \,test nil [do \,body]]]
+
+arc.prn.q[Defining finally.]
+[mac finally [body after]
+  qq.[defuse tf0.\,body hf1[\,after demeta.it]]]
+
+; TODO: Document the 'pk-maybe type.
+; TODO: Make this less specific to the 'pk-ad-hoc-meta type.
+arc.prn.q[Defining meta-error.]
+[= meta-error [arc (fn (meta)
+                     (case type.meta pk-ad-hoc-meta nil
+                       (err:+ "The metadata passed to \"meta-error\" "
+                              "wasn't a value of type "
+                              "'pk-ad-hoc-meta."))
+                     (annotate 'pk-maybe rep.meta!error))]]
+
+arc.prn.q[Defining fn-if-maybe.]
+[= fn-if-maybe [arc (fn (maybe then else)
+                      (case type.maybe pk-maybe nil
+                        (err:+ "The test passed to \"if-maybe\" "
+                               "wasn't a value of type 'pk-maybe."))
+                      (iflet (just) rep.maybe
+                        (pk-call then just)
+                        pk-call.else))]]
+
+arc.prn.q[Defining if-maybe.]
+[mac if-maybe [var test then else]
+  qq.[fn-if-maybe \,test [tf [\,var] \,then] tf0.\,else]]
+
+
+arc.prn.q[Defining fn-iferr.]
+[fun fn-iferr [body catch]
+  [defuse body [hf1:if-maybe err meta-error.it
+                 catch.err
+                 demeta.it]]]
+
+arc.prn.q[Defining iferr.]
+[mac iferr [var body catch]
+  qq.[fn-iferr tf0.\,body [tf [\,var] \,catch]]]
+
+arc.prn.q[Defining try.]
+[mac try [body catch]
+  qq.[iferr \,catch.it \,body \,catch]]

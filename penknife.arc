@@ -187,6 +187,10 @@
 ; (pk-soup-compile soup lexid static-hyperenv)      ; rulebook
 ; (pk-sip-compile self lexid static-hyperenv)       ; rulebook
 ;
+; pk-defuse-param*            ; value satisfying dy!aparam
+; (pk-defuse body afterward)
+; (pk-err contents)
+;
 ; (pk-call self . args)       ; rulebook
 ; (pk-call-set self . args)   ; rulebook
 ; (pk-call-meta self . args)  ; rulebook
@@ -415,11 +419,11 @@
 ;                         If instead this is nil, then a default
 ;                         compile fork should be constructed according
 ;                         to that environment's own behavior.
-;   rep._!error:          If present, the string to raise as an error
+;   rep._!error:          If present, a singleton proper list
+;                         containing the value to raise as an error
 ;                         message whenever the result, but not this
 ;                         metadata, is looked up in a binding or
-;                         environment. If instead this is nil, then no
-;                         error is raised.
+;                         environment.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -816,7 +820,8 @@
   `(annotate 'pk-ad-hoc-meta (obj ,@args)))
 
 (def pk-demeta (meta)
-  (only.err rep.meta!error)
+  (awhen rep.meta!error
+    (pk-err car.it))
   rep.meta!result)
 
 ; TODO: See if this is ever going to be used.
@@ -878,7 +883,8 @@
              pk-ad-hoc-env pk-ad-hoc-env
   (car:or= (.varname:rep.self)
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
-      (+ "The variable \"" (or varname "nil") "\" is unbound."))))
+      (list:+ "The variable \"" (or varname "nil") "\" "
+              "is unbound."))))
 
 (rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
   (.varname:rep.self))
@@ -1198,8 +1204,34 @@
         (pk-hyperenv-overlap global-hyperenv static-hyperenv)))))
 
 
+(= pk-defuse-param* (dy.make-param [err:case type._ pk-native-err
+                                     (error-message rep._.0)
+                                     (tostring write._)]))
+
+(def pk-defuse (body afterward)
+  (pk-call afterward
+    (catch:dy:param-let pk-defuse-param* [throw:pk-meta error list._]
+      (pk-meta result pk-call.body))))
+
+(def pk-err (contents)
+  dy.param-get.pk-defuse-param*.contents)
+
+
 (rc:ontype pk-call args fn fn
-  (apply self args))
+  ; NOTE: Jarc 17 treats escape continuations as errors, but we don't
+  ; want to translate those into Penknife errors, since we're using
+  ; escape continuations to implement 'pk-err in the first place.
+  ; There doesn't seem to be an obvious way to throw arbitrary JVM
+  ; exceptions in Jarc, so we exploit Jarc's mistreatment of escaped
+  ; continuations here in order to throw a brand new
+  ; jarc.lang$Continue value that happens to be an escape continuation
+  ; with the same result as the original.
+  (on-err (aif jv.jclass!jarc-lang$Continue
+            [if (jv.ajava _ it)
+              (catch.throw jvm!value._)
+              (pk-err:annotate 'pk-native-err list._)]
+            [pk-err:annotate 'pk-native-err list._])
+          (thunk:apply self args)))
 
 (rc:ontype pk-call args pk-fn-meta pk-fn-meta
   (pk-demeta:apply pk-call rep.self.0 args))
