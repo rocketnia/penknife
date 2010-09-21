@@ -73,6 +73,11 @@
 
 ; Declaration listing:
 ;
+; (pk-attach-unattached-soup soup lexid env conflict-error)
+; (pk-attach-soup-using soup acc-hyperenv)
+; (pk-attach-slurp-using self acc-hyperenv)  ; rulebook
+; (pk-attach-sip-using self acc-hyperenv)    ; rulebook
+;
 ; (pk-words-hype-staticenv lexid globalenv soup)
 ; (pk-eval-qq basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
@@ -80,9 +85,9 @@
 ; < some external rules using 'def-pk-optimize-expr >
 ; (pk-qq-compiler compiled-op body lexid static-hyperenv)
 ;
-; (pk-wrapmc dynenv arity varargs func)
+; (pk-wrapmc dynenv dyn-hyperenv arity varargs func)
 ; < some external rules using 'def-pk-eval >
-; (pk-captures-hyperenv self)                 ; external rule
+; (pk-captures-hyperenv self)                          ; external rule
 ; < some external rules using 'def-pk-optimize-expr >
 ; pk-qqmeta*                           ; value of type 'pk-ad-hoc-meta
 ; (pk-mc-rest-compiler-for build-fn)
@@ -136,15 +141,20 @@
 ;
 ; pk-lambdacalc-mc
 ;   rep: A list which supports the following fields:
-;   rep._.0:  The number of non-rest arguments to the macro op
+;   rep._.0:  The lexid (lexical ID) of the environments this macro
+;             definition will capture from the dynamic
+;             hyperenvironments it's evaluated in, in order for the
+;             resulting macros to have some environment to use for
+;             their quasiquote operators' generated code.
+;   rep._.1:  The number of non-rest arguments to the macro op
 ;             compiler. This is the minimum number of words that can
 ;             appear in the body of any form using the macro op.
-;   rep._.1:  A boolean indicating, if true, that this is a varargs
+;   rep._.2:  A boolean indicating, if true, that this is a varargs
 ;             macro operator, which is to say that any part of the
 ;             form body that isn't parsed into words for the regular
 ;             arguments will be given as the final argument of the
 ;             wrapped function.
-;   rep._.2:  An expression of one of the 'pk-lambdacalc-[something]
+;   rep._.3:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a function to be wrapped up as
 ;             a macro op. The first argument to the function will be
 ;             an empty 'pk-attached-soup value corresponding to the
@@ -157,6 +167,42 @@
 ;             will be one more 'pk-attached-soup value corresponding
 ;             to the soup that remains after those words have been
 ;             parsed out.
+
+
+; TODO: Figure out what the point of attached soup is if unattached
+; soup contains the same information.
+
+(def pk-attach-unattached-soup (soup lexid env conflict-error)
+  (let hyperenv (pk-make-hyperenv lexid env)
+    (pk-attach-soup-using soup
+      [pk-hyperenv-shove hyperenv _ conflict-error])
+    (annotate 'pk-attached-soup (list lexid hyperenv soup))))
+
+(def pk-attach-soup-using (soup acc-hyperenv)
+  (each slurp rep.soup
+    (pk-attach-slurp-using slurp acc-hyperenv)))
+
+(rc:ontype pk-attach-slurp-using (acc-hyperenv) string string
+  nil)
+
+(rc:ontype pk-attach-slurp-using (acc-hyperenv) rc.list list
+  (each sip self
+    (pk-attach-sip-using sip acc-hyperenv)))
+
+(rc:ontype pk-attach-sip-using (acc-hyperenv)
+             pk-bracketed-soup pk-bracketed-soup
+  (pk-attach-soup-using rep.self.0 acc-hyperenv))
+
+(rc:ontype pk-attach-sip-using (acc-hyperenv)
+             pk-sip-compose pk-sip-compose
+  (each op rep.self.0
+    (pk-attach-soup-using op acc-hyperenv))
+  (pk-attach-soup-using rep.self.1 acc-hyperenv))
+
+(rc:ontype pk-attach-sip-using (acc-hyperenv)
+             pk-sip-hype-staticenv pk-sip-hype-staticenv
+  (do.acc-hyperenv:pk-make-hyperenv rep.self.0 rep.self.1)
+  (pk-attach-soup-using rep.self.2 acc-hyperenv))
 
 
 (def pk-words-hype-staticenv (lexid globalenv soup)
@@ -173,11 +219,6 @@
     (err:+ "A value other than a 'pk-attached-soup value was used as "
            "the basis of a quasiquote form."))
   (withs (basis-lexid rep.basis.0
-          global-hyperenv (pk-copy-hyperenv rep.basis.1)
-          acc-hyperenv [pk-hyperenv-shove global-hyperenv _
-                         (+ "Two global static hyperenvironments "
-                            "spliced into a quasiquote form "
-                            "conflicted.")]
           soup-dsl (afn (dsl)
                      (apply o+ pk-empty-soup*
                        (accum acc
@@ -195,7 +236,6 @@
                                           "was spliced into a "
                                           "quasiquote form."))
                                  (let (lexid hyperenv soup) rep.s
-                                   do.acc-hyperenv.hyperenv
                                    (do.acc:pk-words-hype-staticenv
                                      lexid
                                      (pk-hyperenv-get-global
@@ -204,8 +244,10 @@
                                (err:+ "An illegal internal "
                                       "'pk-lambdacalc-qq operator "
                                       "was encountered.")))))))
-    (annotate 'pk-attached-soup
-      (list basis-lexid global-hyperenv do.soup-dsl.dsl))))
+    (pk-attach-unattached-soup do.soup-dsl.dsl basis-lexid
+      (pk-hyperenv-get rep.basis.1 basis-lexid)
+      (+ "Two global static hyperenvironments spliced into a "
+         "quasiquote form conflicted."))))
 
 (def-pk-eval pk-lambdacalc-qq
   (pk-eval-qq (pk-eval self.0 lexid dyn-hyperenv) self.1
@@ -285,7 +327,7 @@
               do.parse-into-dsl.body)))))
 
 
-(def pk-wrapmc (dynenv arity varargs func)
+(def pk-wrapmc (dynenv dyn-hyperenv arity varargs func)
   (fn (compiled-op body lexid static-hyperenv)
     (let args (n-of arity
                 (iflet (margin word rest) o-split-first-token.body
@@ -305,10 +347,13 @@
                 _]
            args)
       (withs (generated-lexid (uniq)
-              hyperenv (pk-make-hyperenv generated-lexid dynenv)
+              generated-hyperenv
+                (pk-hyperenv-overlap dyn-hyperenv
+                  (pk-make-hyperenv generated-lexid dynenv))
               attached-soup
                 (annotate 'pk-attached-soup
-                  (list generated-lexid hyperenv pk-empty-soup*))
+                  (list generated-lexid generated-hyperenv
+                    pk-empty-soup*))
               func-result (apply pk-call func attached-soup args))
         (case type.func-result pk-attached-soup nil
           (err "The result of a macro wasn't a 'pk-attached-soup."))
@@ -323,15 +368,15 @@
               result-hyperenv static-hyperenv)))))))
 
 (def-pk-eval pk-lambdacalc-mc
-  (pk-wrapmc (pk-hyperenv-get dyn-hyperenv lexid) self.0 self.1
-    (pk-eval self.2 lexid dyn-hyperenv)))
+  (pk-wrapmc (pk-hyperenv-get dyn-hyperenv self.0) dyn-hyperenv
+             self.1 self.2 (pk-eval self.3 lexid dyn-hyperenv)))
 
 (rc:ontype pk-captures-hyperenv () pk-lambdacalc-mc pk-lambdacalc-mc
   t)
 
 (def-pk-optimize-expr pk-lambdacalc-mc
-  `(pk-wrapmc (pk-hyperenv-get _ ',lexid) ,self.0 ,self.1
-     ,(pk-optimize-expr self.2 lexid dyn-hyperenv local-lex env-lex)))
+  `(pk-wrapmc (pk-hyperenv-get _ ',self.0) _ ,self.1 ,self.2
+     ,(pk-optimize-expr self.3 lexid dyn-hyperenv local-lex env-lex)))
 
 (= pk-qqmeta* pk-wrap-op.pk-qq-compiler)
 
@@ -350,7 +395,7 @@
         (pk-compile-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           (thunk:pk-attach:annotate 'pk-lambdacalc-mc
-            (list len.args t
+            (list lexid len.args t
               (pk-detach:do.build-fn:pk-finish-fn
                 (join list.qq args list.rest) nil body pk-qqmeta*
                 lexid static-hyperenv))))))))
@@ -368,7 +413,7 @@
         (pk-compile-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           (thunk:pk-attach:annotate 'pk-lambdacalc-mc
-            (list len.args nil
+            (list lexid len.args nil
               (pk-detach:do.build-fn:pk-finish-fn (cons qq args) nil
                 body pk-qqmeta* lexid static-hyperenv))))))))
 
