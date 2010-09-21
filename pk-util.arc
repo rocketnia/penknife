@@ -152,6 +152,10 @@
 (rc:ontype sip->string-force () pk-bracketed-soup pk-bracketed-soup
   (+ "[" (soup->string-force rep.self.0) "]"))
 
+(rc:ontype sip->string-force ()
+  pk-sip-hype-staticenv pk-sip-hype-staticenv
+  (soup->string-force rep.self.2))
+
 (def pk-stringquote-compiler (compiled-op body lexid static-hyperenv)
   (pk-compile-literal-from-thunk
     (fn () soup->string-force.body)
