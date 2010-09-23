@@ -140,7 +140,7 @@ arc.prn.q[Defining demeta, fn-if, if, do, when, and unless.]
 [mac if [test then else]
   qq.[fn-if \,test tf0.\,then tf0.\,else]]
 [mac* do [] body
-  qq.[tf0.\,body]]
+  qq.[tf0 \,body]]
 [mac* when [test] body
   qq.[if \,test [do \,body] nil]]
 [mac* unless [test] body

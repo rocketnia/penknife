@@ -1031,8 +1031,8 @@
 (mac pk-detach body
   `(fn-pk-detach:fn () ,@body))
 
-(def pk-detachmap (seq)
-  (map [pk-detach _] seq))
+(mac pk-detachmap (seq)
+  `(map [pk-detach _] (pk-noattach ,seq)))
 
 
 (def pk-compile-leaf-from-thunk (staticenv getter)
