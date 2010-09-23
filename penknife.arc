@@ -562,7 +562,7 @@
 
 
 (def start-word (str (o test ~whitec))
-  (zap testify test)
+  (zap rc.otestify test)
   (zap fn-input-ify str)
   (w/outstring s
     (catch:whilet char (or rep.str!peek rep.str!read)  ; Consume EOF.
@@ -571,7 +571,7 @@
         (disp rep.str!read s)))))
 
 (def finish-bracket-word (str (o test whitec))
-  (zap testify test)
+  (zap rc.otestify test)
   (zap fn-input-ify str)
   (annotate 'pk-soup
     (accum acc
@@ -608,12 +608,12 @@
     (writec self.i)))
 
 (rc:ontype o-ltrim ((o test soup-whitec)) rc.list list
-  (aif (pos (complement testify.test) self)
+  (aif (pos (complement rc.otestify.test) self)
     (split self it)
     (list self nil)))
 
 (rc:ontype o-ltrim ((o test whitec)) string string
-  (aif (pos (complement testify.test) self)
+  (aif (pos (complement rc.otestify.test) self)
     (split self it)
     (list self "")))
 
@@ -708,19 +708,19 @@
             throw.default))))))
 
 (def o-split-first-token (seq (o test soup-whitec))
-  (zap testify test)
+  (zap rc.otestify test)
   (let (margin rest) (o-ltrim seq test)
     (awhen (check (o-ltrim rest ~test) ~oi.oempty:car)
       (cons margin it))))
 
 (def o-split-last-token (seq (o test soup-whitec))
-  (zap testify test)
+  (zap rc.otestify test)
   (let (rest margin) (o-rtrim seq test)
     (awhen (check (o-rtrim rest ~test) ~oi.oempty:cadr)
       (join it list.margin))))
 
 (def otokens (seq (o test soup-whitec))
-  (zap testify test)
+  (zap rc.otestify test)
   (accum acc
     (ut:dstwhilet (margin token rest) (o-split-first-token seq test)
       do.acc.token
