@@ -217,7 +217,8 @@
         do.acc.margin
         (do.acc:pk-soup-singleton:annotate 'pk-sip-hype-staticenv
           (list lexid globalenv token))
-        (= soup rest)))))
+        (= soup rest))
+      do.acc.soup)))
 
 (rc:ontype pk-splice-into-qq () pk-attached-soup pk-attached-soup
   (let (lexid hyperenv soup) rep.self
