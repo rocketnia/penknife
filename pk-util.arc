@@ -81,6 +81,7 @@
 ; (pk-compose-compiler compiled-op body lexid static-hyperenv)
 ; (pk-compose . args)
 ; (pk-sip-compile self lexid static-hyperenv)        ; external rule
+; pk-soup-whitec*                             ; value of type 'pk-soup
 ; (pk-generic-infix-compiler base-compiler)
 ; Penknife  [compose ops& op][body~]                 ; syntax
 ; Penknife  [idfn.[compose funcs& func] args&]
@@ -149,12 +150,15 @@
   ; NOTE: On Rainbow, string:map doesn't work here.
   (apply string (map sip->string-force self)))
 
-(rc:ontype sip->string-force () pk-bracketed-soup pk-bracketed-soup
+(rc:ontype sip->string-force () pk-sip-brackets pk-sip-brackets
   (+ "[" (soup->string-force rep.self.0) "]"))
 
 (rc:ontype sip->string-force ()
-  pk-sip-hype-staticenv pk-sip-hype-staticenv
+             pk-sip-hype-staticenv pk-sip-hype-staticenv
   (soup->string-force rep.self.2))
+
+(rc:ontype sip->string-force () pk-sip-whitec pk-sip-whitec
+  " ")
 
 (def pk-stringquote-compiler (compiled-op body lexid static-hyperenv)
   (pk-compile-literal-from-thunk
@@ -291,6 +295,9 @@
       (do.fail:+ "The syntax was a composition form with nothing "
                  "composed."))))
 
+; TODO: Figure out where to put this.
+(= pk-soup-whitec* (pk-soup-singleton:annotate 'pk-sip-whitec nil))
+
 (def pk-generic-infix-compiler (base-compiler)
   (fn (compiled-op1 body1 lexid1 static-hyperenv1)
     (pk-compile-call-from-thunk
@@ -302,9 +309,7 @@
         (let compile-op
                (memo:thunk:pk-fork-to-op-method:do.base-compiler
                  compiled-op1
-                 (let s (pk-soup-singleton:annotate 'pk-soup-whitec
-                          nil)
-                   (o+ body1 s body2))
+                 (o+ body1 pk-soup-whitec* body2)
                  lexid2
                  static-hyperenv2)
           (pk-compile-call-from-thunk

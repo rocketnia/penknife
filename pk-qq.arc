@@ -123,8 +123,8 @@
 ;               (soup _)       - Splice in the soup _.
 ;               (bracket . _)  - Use the quasiquote DSL _ to build a
 ;                                'pk-soup value. Wrap that up in a
-;                                'pk-bracketed-soup value, and splice
-;                                it in as a sip.
+;                                'pk-sip-brackets value, and splice it
+;                                in as a sip.
 ;               (splice _)
 ;                 - Splice in the 'pk-attached-soup value resulting
 ;                   from the 'pk-lambdacalc-[something] expression _.
@@ -190,7 +190,7 @@
     (pk-attach-sip-using sip acc-hyperenv)))
 
 (rc:ontype pk-attach-sip-using (acc-hyperenv)
-             pk-bracketed-soup pk-bracketed-soup
+             pk-sip-brackets pk-sip-brackets
   (pk-attach-soup-using rep.self.0 acc-hyperenv))
 
 (rc:ontype pk-attach-sip-using (acc-hyperenv)
@@ -203,6 +203,10 @@
              pk-sip-hype-staticenv pk-sip-hype-staticenv
   (do.acc-hyperenv:pk-make-hyperenv rep.self.0 rep.self.1)
   (pk-attach-soup-using rep.self.2 acc-hyperenv))
+
+(rc:ontype pk-attach-sip-using (acc-hyperenv)
+             pk-sip-whitec pk-sip-whitec
+  nil)
 
 
 (def pk-words-hype-staticenv (lexid globalenv soup)
@@ -226,7 +230,7 @@
                            (case op
                              soup     (do.acc car.args)
                              bracket  (do.acc:pk-soup-singleton
-                                        (annotate 'pk-bracketed-soup
+                                        (annotate 'pk-sip-brackets
                                           (list self.args)))
                              splice
                                (let s (do.handle-splice car.args)
@@ -283,7 +287,7 @@
              (while:let (margin rest)
                           (o-ltrim soup
                             [~or (is _ #\\)
-                                 (isa _ 'pk-bracketed-soup)])
+                                 (isa _ 'pk-sip-brackets)])
                (unless oi.oempty.margin
                  (do.acc `(soup ,margin)))
                (whenlet (trigger rest) (osplit rest 1)
@@ -301,7 +305,7 @@
                                       (pk-soup-compile
                                         word lexid static-hyperenv))))
                               (= soup rest))
-                         (case type.esccode pk-bracketed-soup
+                         (case type.esccode pk-sip-brackets
                            (let words (otokens rep.esccode.0)
                              (unless single.words
                                (err:+ "A quasiquote bracket escape "

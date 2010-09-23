@@ -235,15 +235,15 @@
 ;        elements that make sense to keep in dedicated string types,
 ;        such as characters and bytes.
 ;
-; pk-soup-whitec
+; pk-sip-whitec
 ;   rep: Ignored. This value indicates a whitespace sip that doesn't
 ;        correspond to any particular character.
 ;
-; pk-bracketed-soup
+; pk-sip-brackets
 ;   rep: A singleton proper list containing a value of type 'pk-soup.
 ;        This is soup which is semantically understood as being the
 ;        interior of a pair of brackets. It often appears as a sip in
-;        another pk-bracketed-soup's soup in order to represent nested
+;        another pk-sip-brackets's soup in order to represent nested
 ;        brackets.
 ;
 ; pk-lambdacalc-literal
@@ -580,7 +580,7 @@
           (do rep.str!read
               (only.acc:check inside.chars ~empty)
               (= chars (outstring))
-              (push (annotate 'pk-bracketed-soup
+              (push (annotate 'pk-sip-brackets
                       (list finish-brackets.str))
                     nonchars))
           (if (or no.char do.test.char)
@@ -601,7 +601,7 @@
 
 
 (def soup-whitec (x)
-  (case type.x char whitec.x rc.a-!pk-soup-whitec.x))
+  (case type.x char whitec.x rc.a-!pk-sip-whitec.x))
 
 (rc:ontype orev () string string
   (tostring:down i (- len.self 1) 0
@@ -1132,8 +1132,8 @@
   (case type.soup pk-sip-hype-staticenv
     (let (inner-lexid globalenv inner-soup) rep.soup
       (pk-identifier-list inner-soup inner-lexid))
-    (do (case type.soup pk-bracketed-soup nil
-          (err "An identifier list wasn't a 'pk-bracketed-soup."))
+    (do (case type.soup pk-sip-brackets nil
+          (err "An identifier list wasn't a 'pk-sip-brackets."))
         (map [pk-soup-identifier _ lexid] (otokens rep.soup.0)))))
 
 (mr:rule pk-soup-compile-tl (soup lexid static-hyperenv) expression
@@ -1174,7 +1174,7 @@
     (do.fail "The word didn't contain an infix operator.")))
 
 (mr:rule pk-soup-compile (soup lexid static-hyperenv) prefix
-  (let (op bodies) (o-rtrim soup rc.a-!pk-bracketed-soup)
+  (let (op bodies) (o-rtrim soup rc.a-!pk-sip-brackets)
     (unless (or (and oi.oempty.op (oi.olen> bodies 1))
                 (and (pk-soup-identifier op lexid)
                      (oi.olen> bodies 0)))
@@ -1189,7 +1189,7 @@
     op))
 
 (rc:ontype pk-sip-compile (lexid static-hyperenv)
-             pk-bracketed-soup pk-bracketed-soup
+             pk-sip-brackets pk-sip-brackets
   (zap car:rep self)
   (iflet (margin op rest) o-split-first-token.self
     (let compiled-op (pk-soup-compile op lexid static-hyperenv)
