@@ -79,6 +79,7 @@
 ; (pk-attach-sip-using self acc-hyperenv)    ; rulebook
 ;
 ; (pk-words-hype-staticenv lexid globalenv soup)
+; (pk-splice-into-qq self)                        ; rulebook
 ; (pk-eval-qq basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
 ; (pk-captures-hyperenv self)                          ; external rule
@@ -218,6 +219,14 @@
           (list lexid globalenv token))
         (= soup rest)))))
 
+(rc:ontype pk-splice-into-qq () pk-attached-soup pk-attached-soup
+  (let (lexid hyperenv soup) rep.self
+    (pk-words-hype-staticenv
+      lexid (pk-hyperenv-get-global hyperenv lexid) soup)))
+
+(rc:ontype pk-splice-into-qq () pk-soup pk-soup
+  self)
+
 (def pk-eval-qq (basis dsl handle-splice)
   (case type.basis pk-attached-soup nil
     (err:+ "A value other than a 'pk-attached-soup value was used as "
@@ -233,18 +242,8 @@
                                         (annotate 'pk-sip-brackets
                                           (list self.args)))
                              splice
-                               (let s (do.handle-splice car.args)
-                                 (case type.s pk-attached-soup nil
-                                   (err:+ "A value other than a "
-                                          "'pk-attached-soup value "
-                                          "was spliced into a "
-                                          "quasiquote form."))
-                                 (let (lexid hyperenv soup) rep.s
-                                   (do.acc:pk-words-hype-staticenv
-                                     lexid
-                                     (pk-hyperenv-get-global
-                                       hyperenv lexid)
-                                     soup)))
+                               (do.acc:pk-splice-into-qq
+                                 (do.handle-splice car.args))
                                (err:+ "An illegal internal "
                                       "'pk-lambdacalc-qq operator "
                                       "was encountered.")))))))
