@@ -89,7 +89,7 @@
 ; (fn-input-ify self)  ; rulebook
 ;
 ; (newline-normalizer str)
-; (comment-ignorer str)
+; (comment-ignorer str comment-char)
 ;
 ; (start-word str (o test ~whitec))
 ; (finish-bracket-word str (o test whitec))
@@ -133,6 +133,7 @@
 ; (pk-make-ad-hoc-env)
 ; (pk-staticenv-get-compile-fork staticenv hyped-varname globalenv)
 ; (pk-staticenv-default-op-compiler self)     ; rulebook
+; pk-comment-char*                            ; value of type 'char
 ; (pk-staticenv-read-eval-tl self lexid str)  ; rulebook
 ; (pk-staticenv-literal self name)            ; rulebook
 ; (pk-dynenv-ensure-binding self varname)     ; rulebook
@@ -530,7 +531,7 @@
           read   (do1 do.peek.t.0 call.read)
                  (err "Illegal fn-input option."))))))
 
-(def comment-ignorer (str)
+(def comment-ignorer (str comment-char)
   (zap fn-input-ify str)
   (withs (in-comment nil
           peek (fn (blocking)
@@ -544,7 +545,7 @@
                    (let char rep.str!peek
                      (when (if in-comment
                              (or no.char (pos char "\r\n"))
-                             (is char #\;))
+                             (is char comment-char))
                        (zap no in-comment))
                      (if in-comment
                        rep.str!read
@@ -863,10 +864,13 @@
              pk-ad-hoc-env pk-ad-hoc-env
   pk-function-call-compiler)
 
+(= pk-comment-char* #\;)
+
 ; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
 (rc:ontype pk-staticenv-read-eval-tl (lexid str)
              pk-ad-hoc-env pk-ad-hoc-env
-  (aif (start-word&finish-bracket-word comment-ignorer.str)
+  (aif (start-word&finish-bracket-word:comment-ignorer
+         str pk-comment-char*)
     (pk-eval-tl it lexid (pk-make-hyperenv lexid self))
     (pk-meta action (list:fn ()) quit list!goodbye)))
 
