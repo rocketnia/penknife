@@ -84,8 +84,6 @@
 ; plt  ; taken out of Lathe's imp/sniff.arc
 ; jvm  ; taken out of Lathe's imp/jvm.arc
 ;
-; (thunk . body)  ; macro
-;
 ; (fn-input-ify self)  ; rulebook
 ;
 ; (newline-normalizer str)
@@ -438,10 +436,6 @@
                   jv do.lathe!imp/jvm))
 
 (= plt sn.plt jvm jv.jvm)
-
-
-(mac thunk body
-  `(fn () ,@body))
 
 
 (rc:ontype fn-input-ify () fn-input fn-input
