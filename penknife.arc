@@ -130,16 +130,16 @@
 ;
 ; (pk-make-ad-hoc-env)
 ; (pk-staticenv-get-compile-fork staticenv hyped-varname globalenv)
-; (pk-staticenv-default-op-compiler self)     ; rulebook
-; pk-comment-char*                            ; value of type 'char
-; (pk-staticenv-read-eval-tl self lexid str)  ; rulebook
-; (pk-staticenv-literal self name)            ; rulebook
-; (pk-dynenv-ensure-binding self varname)     ; rulebook
-; (pk-dynenv-get-binding self varname)        ; rulebook
-; (pk-dynenv-get self varname)                ; rulebook
-; (pk-dynenv-get-meta self varname)           ; rulebook
-; (pk-dynenv-set self varname)                ; rulebook
-; (pk-dynenv-set-meta self varname)           ; rulebook
+; (pk-staticenv-default-op-compiler self)        ; rulebook
+; pk-comment-char*                               ; value of type 'char
+; (pk-staticenv-read-compile-tl self lexid str)  ; rulebook
+; (pk-staticenv-literal self name)               ; rulebook
+; (pk-dynenv-ensure-binding self varname)        ; rulebook
+; (pk-dynenv-get-binding self varname)           ; rulebook
+; (pk-dynenv-get self varname)                   ; rulebook
+; (pk-dynenv-get-meta self varname)              ; rulebook
+; (pk-dynenv-set self varname)                   ; rulebook
+; (pk-dynenv-set-meta self varname)              ; rulebook
 ;
 ; (pk-hyped-sym-lexid hyped-sym)
 ; (pk-hyped-sym-name hyped-sym)
@@ -198,13 +198,13 @@
 ; (def-pk-eval-meta type . body)          ; macro
 ; (pk-eval self lexid dyn-hyperenv)       ; rulebook
 ; (pk-eval-meta self lexid dyn-hyperenv)  ; rulebook
-; (pk-eval-tl self lexid dyn-hyperenv)    ; rulebook
 ;
 ; pk-repllexid*  ; symbol to be used as a lexid (lexical ID)
 ; pk-replenv*    ; value of type 'pk-ad-hoc-env
 ;
 ; (error-message error)
-; (pktl lexid env str act-on report-error prompt)
+; (pktl act-on report-error nextmeta)
+; (pktl-stream lexid env str act-on report-error prompt)
 ; (pkrepl (o str missing))
 ; (pkdo lexid env str)
 ; (pkload lexid env filename)
@@ -863,12 +863,11 @@
 (= pk-comment-char* #\;)
 
 ; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
-(rc:ontype pk-staticenv-read-eval-tl (lexid str)
+(rc:ontype pk-staticenv-read-compile-tl (lexid str)
              pk-ad-hoc-env pk-ad-hoc-env
-  (aif (start-word&finish-bracket-word:comment-ignorer
-         str pk-comment-char*)
-    (pk-eval-tl it lexid (pk-make-hyperenv lexid self))
-    (pk-meta action (list:fn ()) quit list!goodbye)))
+  (awhen (start-word&finish-bracket-word:comment-ignorer
+           str pk-comment-char*)
+    (list:pk-soup-compile-tl it lexid (pk-make-hyperenv lexid self))))
 
 ; TODO: Allow literal syntax customization among 'pk-ad-hoc-env
 ; values.
@@ -932,7 +931,8 @@
 (def pk-hyperenv-get-both (hyperenv lexid)
   (or rep.hyperenv.lexid
       (err:+ "A hyperenvironment was indexed with an unsupported "
-             "lexid.")))
+             "lexid: " (tostring write.hyperenv) " with "
+             (tostring write.lexid))))
 
 (def pk-hyperenv-combine (a b)
   (zap rep a)
@@ -1323,10 +1323,6 @@
   (pk-eval-meta (pk-soup-compile tagged-self lexid dyn-hyperenv)
     lexid dyn-hyperenv))
 
-(rc:ontype pk-eval-tl (lexid hyperenv) pk-soup pk-soup
-  (pk-eval-meta (pk-soup-compile-tl self lexid hyperenv)
-    lexid hyperenv))
-
 
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
@@ -1350,28 +1346,35 @@
     (+ "" error)
     (err "The argument to 'error-message wasn't an error.")))
 
-(def pktl (lexid env str act-on report-error prompt)
-  (zap newline-normalizer str)
-  
+(def pktl (act-on report-error nextmeta)
   ; NOTE: Jarc's 'on-err suppresses escape continuations, so
   ; 'catch:until:on-err and 'throw would fail here.
-  ;
-  ; NOTE: If 'pk-staticenv-read-eval-tl raises an error while reading,
-  ; rather than while compiling or evaluating, this could loop
-  ; infinitely. We plan to let the environment support command syntax
-  ; we can't predict, such as multiple-word commands or commands with
-  ; mismatched brackets, so there isn't an obvious way to separate the
-  ; reading and compiling phases.
-  ;
   (car:catch:until:only.throw:on-err
     [do (do.report-error error-message._) nil]
-    (fn () do.prompt.str                        ; Wait for more input.
-           (let meta (pk-staticenv-read-eval-tl env lexid str)
-             (iflet (action) rep.meta!action
-               pk-call.action
-               do.act-on.meta)
-             (whenlet (quit) rep.meta!quit
-               list.quit)))))
+    (thunk:let meta (iflet (meta) call.nextmeta
+                      meta
+                      (pk-meta action  (list:fn ())
+                               quit    list!goodbye))
+      (iflet (action) rep.meta!action
+        pk-call.action
+        do.act-on.meta)
+      (whenlet (quit) rep.meta!quit
+        list.quit))))
+
+(def pktl-stream (lexid env str act-on report-error prompt)
+  (zap newline-normalizer str)
+  ; NOTE: If 'pk-staticenv-read-compile-tl raises an error while
+  ; reading, rather than while compiling, this could loop infinitely.
+  ; We plan to let the environment support command syntax we can't
+  ; predict, such as multiple-word commands or commands with
+  ; mismatched brackets, so there isn't an obvious way to separate the
+  ; reading and compiling phases.
+  (let hyperenv (pk-make-hyperenv lexid env)
+    (pktl act-on report-error
+      (fn ()
+        do.prompt.str     ; Wait for more input.
+        (whenlet (expr) (pk-staticenv-read-compile-tl env lexid str)
+          (list:pk-eval-meta expr lexid hyperenv))))))
 
 ; NOTE: Rainbow's profiler doesn't like function calls in optional
 ; arguments.
@@ -1379,25 +1382,23 @@
   (def pkrepl ((o str missing))
     (when (is str missing)
       (= str (ut.xstdin)))
-    (pktl pk-repllexid*
-          pk-replenv*
-          str
-          [let val pk-demeta._
-            (on-err [prn "Error writing: " error-message._]
-              (fn () write.val (prn)))]
-          [prn "Error: " _]
-          ; Show the prompt unless there's a non-whitespace character
-          ; ready.
-          [unless (catch:while rep._!ready
-                    (if (whitec rep._!peek)
-                      rep._!read
-                      throw.t))
-            (pr "pk> ")])))
+    (pktl-stream pk-repllexid* pk-replenv* str
+      [let val pk-demeta._
+        (on-err [prn "Error writing: " error-message._]
+          (fn () write.val (prn)))]
+      [prn "Error: " _]
+      ; Show the prompt unless there's a non-whitespace character
+      ; ready.
+      [unless (catch:while rep._!ready
+                (if (whitec rep._!peek)
+                  rep._!read
+                  throw.t))
+        (pr "pk> ")])))
 
 (def pkdo (lexid env str)
   ; Display no results, raise all errors, and show no prompts.
   ; NOTE: Rainbow doesn't like [].
-  (pktl lexid env str [do] err [do]))
+  (pktl-stream lexid env str [do] err [do]))
 
 (def pkload (lexid env filename)
   (w/infile str filename (pkdo lexid env str)))
