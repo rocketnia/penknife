@@ -162,7 +162,7 @@
 ; pk-attach-param*                ; value satisfying dy!aparam
 ; (fn-pk-noattach body)
 ; (pk-noattach . body)            ; macro
-; (fn-pk-attach body (o built-up-hyperenv (pk-make-hyperenv)))
+; (fn-pk-attach body (o built-up-hyperenv missing))
 ; (pk-attach . body)              ; macro
 ; (pk-attach-to hyperenv . body)  ; macro
 ; (fn-pk-detach body)
@@ -205,7 +205,7 @@
 ;
 ; (error-message error)
 ; (pktl lexid env str act-on report-error prompt)
-; (pkrepl (o str (errsafe:stdin)))
+; (pkrepl (o str missing))
 ; (pkdo lexid env str)
 ; (pkload lexid env filename)
 ; (pkcomp str)
@@ -555,6 +555,8 @@
                  (err "Illegal fn-input option."))))))
 
 
+; NOTE: Rainbow's profiler doesn't like function calls in optional
+; arguments, but it can actually handle this one.
 (def start-word (str (o test ~whitec))
   (zap rc.otestify test)
   (zap fn-input-ify str)
@@ -992,15 +994,20 @@
 (mac pk-noattach body
   `(fn-pk-noattach:fn () ,@body))
 
-(def fn-pk-attach (body (o built-up-hyperenv (pk-make-hyperenv)))
-  (dy:param-let pk-attach-param*
-                  [pk-hyperenv-shove built-up-hyperenv _
-                    (+ "A 'pk-detach block resulted in a "
-                       "hyperenvironment part that conflicted with "
-                       "others in the same 'pk-attach block.")]
-    (let unattached-lambdacalc call.body
-      (annotate 'pk-attached-lambdacalc
-        (list built-up-hyperenv unattached-lambdacalc)))))
+; NOTE: Rainbow's profiler doesn't like function calls in optional
+; arguments.
+(w/uniq missing
+  (def fn-pk-attach (body (o built-up-hyperenv missing))
+    (when (is built-up-hyperenv missing)
+      (= built-up-hyperenv (pk-make-hyperenv)))
+    (dy:param-let pk-attach-param*
+                    [pk-hyperenv-shove built-up-hyperenv _
+                      (+ "A 'pk-detach block resulted in a "
+                         "hyperenvironment part that conflicted with "
+                         "others in the same 'pk-attach block.")]
+      (let unattached-lambdacalc call.body
+        (annotate 'pk-attached-lambdacalc
+          (list built-up-hyperenv unattached-lambdacalc))))))
 
 (mac pk-attach body
   `(fn-pk-attach:fn () ,@body))
@@ -1366,25 +1373,26 @@
              (whenlet (quit) rep.meta!quit
                list.quit)))))
 
-; NOTE: On Rainbow, (stdin), of all things, produces an error. When
-; that happens, we go get it ourselves.
-(def pkrepl ((o str (errsafe:stdin)))
-  (when (and no.str jv.jclass!rainbow-functions-IO)
-    (= str (jvm!rainbow-functions-IO-stdIn)))
-  (pktl pk-repllexid*
-        pk-replenv*
-        str
-        [let val pk-demeta._
-          (on-err [prn "Error writing: " error-message._]
-            (fn () write.val (prn)))]
-        [prn "Error: " _]
-        ; Show the prompt unless there's a non-whitespace character
-        ; ready.
-        [unless (catch:while rep._!ready
-                  (if (whitec rep._!peek)
-                    rep._!read
-                    throw.t))
-          (pr "pk> ")]))
+; NOTE: Rainbow's profiler doesn't like function calls in optional
+; arguments.
+(w/uniq missing
+  (def pkrepl ((o str missing))
+    (when (is str missing)
+      (= str (ut.xstdin)))
+    (pktl pk-repllexid*
+          pk-replenv*
+          str
+          [let val pk-demeta._
+            (on-err [prn "Error writing: " error-message._]
+              (fn () write.val (prn)))]
+          [prn "Error: " _]
+          ; Show the prompt unless there's a non-whitespace character
+          ; ready.
+          [unless (catch:while rep._!ready
+                    (if (whitec rep._!peek)
+                      rep._!read
+                      throw.t))
+            (pr "pk> ")])))
 
 (def pkdo (lexid env str)
   ; Display no results, raise all errors, and show no prompts.

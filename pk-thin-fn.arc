@@ -54,7 +54,7 @@
 ;
 ; (pk-captures-hyperenv self)  ; rulebook
 ;
-; (odedup self (o test rc.oiso2))  ; rulebook
+; (odedup self (o test missing))  ; rulebook
 ;
 ; (def-pk-optimize-expr type . body)                           ; macro
 ; (def-pk-optimize-expr-meta type . body)                      ; macro
@@ -179,11 +179,16 @@
   (some pk-captures-hyperenv rep.self.2))
 
 
-(rc:ontype odedup ((o test rc.oiso2)) rc.list list
-  (rev:ut:ret acc nil
-    (each elem self
-      (unless (some [do.test elem _] acc)
-        (push elem acc)))))
+; NOTE: Rainbow's profiler doesn't like function calls in optional
+; arguments.
+(w/uniq missing
+  (rc:ontype odedup ((o test missing)) rc.list list
+    (when (is test missing)
+      (= test rc.oiso2))
+    (rev:ut:ret acc nil
+      (each elem self
+        (unless (some [do.test elem _] acc)
+          (push elem acc))))))
 
 
 (mac def-pk-optimize-expr (type . body)
