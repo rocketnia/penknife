@@ -82,14 +82,14 @@
 ; (pk-splice-into-qq self)                        ; rulebook
 ; (pk-eval-qq basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
-; (pk-captures-hyperenv self)                          ; external rule
-; < some external rules using 'def-pk-optimize-expr >
+; (pk-captures-hyperenv self)                     ; external rule
+; < some external rules using 'def-pk-optimize-subexpr >
 ; (pk-qq-compiler compiled-op body lexid static-hyperenv)
 ;
 ; (pk-wrapmc dynenv dyn-hyperenv arity varargs func)
 ; < some external rules using 'def-pk-eval >
 ; (pk-captures-hyperenv self)                          ; external rule
-; < some external rules using 'def-pk-optimize-expr >
+; < some external rules using 'def-pk-optimize-subexpr >
 ; pk-qqmeta*                           ; value of type 'pk-ad-hoc-meta
 ; (pk-mc-rest-compiler-for build-fn)
 ; (pk-mc-compiler-for build-fn)
@@ -260,7 +260,7 @@
 (rc:ontype pk-captures-hyperenv () pk-lambdacalc-qq pk-lambdacalc-qq
   t)
 
-(def-pk-optimize-expr pk-lambdacalc-qq
+(def-pk-optimize-subexpr pk-lambdacalc-qq
   (let optimize-dsl
          (afn (dsl)
            (map [case car._
@@ -270,13 +270,14 @@
                     `(splice
                        (,'unquote
                          (fn ()
-                           ,(pk-optimize-expr _.1
+                           ,(pk-optimize-subexpr _.1
                               lexid dyn-hyperenv local-lex env-lex))))
                     (err:+ "An illegal internal 'pk-lambdacalc-qq "
                            "operator was encountered.")]
                 dsl))
     `(pk-eval-qq
-       ,(pk-optimize-expr self.0 lexid dyn-hyperenv local-lex env-lex)
+       ,(pk-optimize-subexpr
+          self.0 lexid dyn-hyperenv local-lex env-lex)
        (,'quasiquote ,(optimize-dsl self.1))
        call)))
 
@@ -378,9 +379,10 @@
 (rc:ontype pk-captures-hyperenv () pk-lambdacalc-mc pk-lambdacalc-mc
   t)
 
-(def-pk-optimize-expr pk-lambdacalc-mc
+(def-pk-optimize-subexpr pk-lambdacalc-mc
   `(pk-wrapmc (pk-hyperenv-get _ ',self.0) _ ,self.1 ,self.2
-     ,(pk-optimize-expr self.3 lexid dyn-hyperenv local-lex env-lex)))
+     ,(pk-optimize-subexpr
+        self.3 lexid dyn-hyperenv local-lex env-lex)))
 
 (= pk-qqmeta* pk-wrap-op.pk-qq-compiler)
 

@@ -56,11 +56,11 @@
 ;
 ; (odedup self (o test missing))  ; rulebook
 ;
-; (def-pk-optimize-expr type . body)                           ; macro
-; (def-pk-optimize-expr-meta type . body)                      ; macro
-; (pk-optimize-expr self lexid dyn-hyperenv local-lex env-lex)
+; (def-pk-optimize-subexpr type . body)       ; macro
+; (def-pk-optimize-subexpr-meta type . body)  ; macro
+; (pk-optimize-subexpr self lexid dyn-hyperenv local-lex env-lex)
 ;   ; rulebook
-; (pk-optimize-expr-meta self lexid dyn-hyperenv local-lex env-lex)
+; (pk-optimize-subexpr-meta self lexid dyn-hyperenv local-lex env-lex)
 ;   ; rulebook
 ;
 ; < some external rules using 'def-pk-eval >
@@ -191,59 +191,62 @@
           (push elem acc))))))
 
 
-(mac def-pk-optimize-expr (type . body)
+(mac def-pk-optimize-subexpr (type . body)
   (w/uniq g-backing-fn
     `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv
                              local-lex env-lex fail)
                           ,@body)
-       (,rc!ontype pk-optimize-expr
+       (,rc!ontype pk-optimize-subexpr
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          (,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
                         env-lex fail))
-       (,rc!ontype pk-optimize-expr-meta
+       (,rc!ontype pk-optimize-subexpr-meta
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          `(pk-meta result
             ,(,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
                             env-lex fail))))))
 
-(mac def-pk-optimize-expr-meta (type . body)
+(mac def-pk-optimize-subexpr-meta (type . body)
   (w/uniq g-backing-fn
     `(let ,g-backing-fn (fn (self tagged-self lexid dyn-hyperenv
                              local-lex env-lex fail)
                           ,@body)
-       (,rc!ontype pk-optimize-expr
+       (,rc!ontype pk-optimize-subexpr
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          `(pk-demeta ,(,g-backing-fn rep.self self lexid dyn-hyperenv
                                      local-lex env-lex fail)))
-       (,rc!ontype pk-optimize-expr-meta
+       (,rc!ontype pk-optimize-subexpr-meta
                      (lexid dyn-hyperenv local-lex env-lex)
                      ,type ,type
          (,g-backing-fn rep.self self lexid dyn-hyperenv local-lex
                         env-lex fail)))))
 
-(def-pk-optimize-expr pk-lambdacalc-call
+(def-pk-optimize-subexpr pk-lambdacalc-call
   `(pk-call
-     ,@(map [pk-optimize-expr _ lexid dyn-hyperenv local-lex env-lex]
+     ,@(map [pk-optimize-subexpr
+              _ lexid dyn-hyperenv local-lex env-lex]
             self)))
 
-(def-pk-optimize-expr pk-lambdacalc-call-set
+(def-pk-optimize-subexpr pk-lambdacalc-call-set
   `(pk-call-set
-     ,@(map [pk-optimize-expr _ lexid dyn-hyperenv local-lex env-lex]
+     ,@(map [pk-optimize-subexpr
+              _ lexid dyn-hyperenv local-lex env-lex]
             self)))
 
-(def-pk-optimize-expr-meta pk-lambdacalc-call-meta
+(def-pk-optimize-subexpr-meta pk-lambdacalc-call-meta
   `(pk-call-meta
-     ,@(map [pk-optimize-expr _ lexid dyn-hyperenv local-lex env-lex]
+     ,@(map [pk-optimize-subexpr
+              _ lexid dyn-hyperenv local-lex env-lex]
             self)))
 
-(def-pk-optimize-expr pk-lambdacalc-literal
+(def-pk-optimize-subexpr pk-lambdacalc-literal
   (zap car self)
   `(',thunk.self))
 
-(def-pk-optimize-expr-meta pk-lambdacalc-literal-meta
+(def-pk-optimize-subexpr-meta pk-lambdacalc-literal-meta
   (zap car self)
   `(',thunk.self))
 
@@ -254,7 +257,7 @@
 ; which is a Racket vector) Racket would evaluate the quoted vector by
 ; copying it.
 
-(def-pk-optimize-expr pk-lambdacalc-var
+(def-pk-optimize-subexpr pk-lambdacalc-var
   (if (oi.opos local-lex self)
     `(pk-demeta ,pk-mangle.self)
       (oi.opos env-lex self)
@@ -262,7 +265,7 @@
     (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv self)
       `(pk-binding-get (',thunk.binding)))))
 
-(def-pk-optimize-expr-meta pk-lambdacalc-var-meta
+(def-pk-optimize-subexpr-meta pk-lambdacalc-var-meta
   (if (oi.opos local-lex self)
     pk-mangle.self
       (oi.opos env-lex self)
@@ -270,9 +273,9 @@
     (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv self)
       `(pk-binding-get-meta (',thunk.binding)))))
 
-(def-pk-optimize-expr pk-lambdacalc-set
+(def-pk-optimize-subexpr pk-lambdacalc-set
   (withs ((var val-expr) self
-          val (pk-optimize-expr
+          val (pk-optimize-subexpr
                 val-expr lexid dyn-hyperenv local-lex env-lex))
     (if (oi.opos local-lex var)
       `(assign ,pk-mangle.var (pk-meta result ,val))
@@ -281,9 +284,9 @@
       (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv var)
         `(pk-binding-set (',thunk.binding) ,val)))))
 
-(def-pk-optimize-expr pk-lambdacalc-set-meta
+(def-pk-optimize-subexpr pk-lambdacalc-set-meta
   (withs ((var val-expr) self
-          val (pk-optimize-expr
+          val (pk-optimize-subexpr
                 val-expr lexid dyn-hyperenv local-lex env-lex))
     (if (oi.opos local-lex var)
       `(assign ,pk-mangle.var ,val)
@@ -292,11 +295,11 @@
       (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv var)
         `(pk-binding-set-meta (',thunk.binding) ,val)))))
 
-(def-pk-optimize-expr pk-lambdacalc-demeta
-  (pk-optimize-expr-meta
+(def-pk-optimize-subexpr pk-lambdacalc-demeta
+  (pk-optimize-subexpr-meta
     car.self lexid dyn-hyperenv local-lex env-lex))
 
-(def-pk-optimize-expr pk-lambdacalc-thin-fn
+(def-pk-optimize-subexpr pk-lambdacalc-thin-fn
   (withs ((args rest body)  self
           capturing         (some pk-captures-hyperenv body)
           arg-set           (odedup:join args rest)
@@ -312,8 +315,9 @@
        ,@(map [let _ pk-mangle._ `(assign ,_ (pk-meta result ,_))]
               arg-set)
        ,@(let body
-                (map [pk-optimize-expr _ lexid dyn-hyperenv
-                                       inner-local-lex inner-env-lex]
+                (map [pk-optimize-subexpr _ lexid dyn-hyperenv
+                                          inner-local-lex
+                                          inner-env-lex]
                      body)
            (case capturing nil body
              `((let _ (pk-hyperenv-shadow-assoclist _
@@ -327,7 +331,7 @@
 ; hyperenvironment might be captured, it's in the variable _.
 (def-pk-eval pk-lambdacalc-thin-fn
   (eval `(let _ (',thunk.dyn-hyperenv)
-           ,(pk-optimize-expr
+           ,(pk-optimize-subexpr
               tagged-self lexid dyn-hyperenv nil nil))))
 
 

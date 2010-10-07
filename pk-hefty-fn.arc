@@ -47,8 +47,8 @@
 ; (pk-call self . args)  ; external rule
 ;
 ; < some external rules using 'def-pk-eval >
-; (pk-captures-hyperenv self)                          ; external rule
-; < some external rules using 'def-pk-optimize-expr >
+; (pk-captures-hyperenv self)                 ; external rule
+; < some external rules using 'def-pk-optimize-subexpr >
 ;
 ; (pk-hefty-fn-rest-compiler compiled-op body lexid static-hyperenv)
 ; (pk-hefty-fn-compiler compiled-op body lexid static-hyperenv)
@@ -89,9 +89,9 @@
              pk-lambdacalc-hefty-fn pk-lambdacalc-hefty-fn
   t)
 
-(def-pk-optimize-expr pk-lambdacalc-hefty-fn
+(def-pk-optimize-subexpr pk-lambdacalc-hefty-fn
   `(annotate 'pk-hefty-fn
-     (obj compiled  ,(pk-optimize-expr
+     (obj compiled  ,(pk-optimize-subexpr
                        self lexid dyn-hyperenv local-lex env-lex)
           expr      (',thunk.tagged-self)
           hyperenv  _)))
