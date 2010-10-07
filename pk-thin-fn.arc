@@ -326,29 +326,9 @@
 ; NOTE: In a compiled expression, when the current dynamic
 ; hyperenvironment might be captured, it's in the variable _.
 (def-pk-eval pk-lambdacalc-thin-fn
-  (withs ((args rest body)  self
-          capturing         (some pk-captures-hyperenv body)
-          arg-set           (odedup:join args rest)
-          local-lex         (unless capturing arg-set)
-          env-lex           (when capturing arg-set))
-    (eval `(fn ,(ut.join-end (map pk-mangle args)
-                             (when rest (pk-mangle car.rest)))
-             ,@(when rest
-                 (let var (pk-mangle car.rest)
-                   `((assign ,var (copylist ,var)))))
-             ,@(map [let _ pk-mangle._
-                      `(assign ,_ (pk-meta result ,_))]
-                    arg-set)
-             ,@(let body (map [pk-optimize-expr _ lexid dyn-hyperenv
-                                                local-lex env-lex]
-                              body)
-                 (case capturing nil body
-                   `((let _ (pk-hyperenv-shadow-assoclist
-                              (',thunk.dyn-hyperenv)
-                              (list ,@(map [do `(list (',thunk._)
-                                                      ,pk-mangle._)]
-                                           arg-set)))
-                       ,@body))))))))
+  (eval `(let _ (',thunk.dyn-hyperenv)
+           ,(pk-optimize-expr
+              tagged-self lexid dyn-hyperenv nil nil))))
 
 
 (def pk-finish-fn (args rest body meta lexid static-hyperenv)
