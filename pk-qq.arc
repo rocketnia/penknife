@@ -397,14 +397,17 @@
                   (err "A mc-rest parameter wasn't an identifier.")]
               qq (do.check:pk-soup-identifier qq lexid)
               args (map check (pk-identifier-list args lexid))
-              rest (do.check:pk-soup-identifier rest lexid))
-        (pk-compile-leaf-from-thunk
-          (pk-hyperenv-get static-hyperenv lexid)
-          (thunk:pk-attach:annotate 'pk-lambdacalc-mc
-            (list lexid len.args t
-              (pk-detach:do.build-fn:pk-finish-fn
-                (join list.qq args list.rest) nil body pk-qqmeta*
-                lexid static-hyperenv))))))))
+              rest (do.check:pk-soup-identifier rest lexid)
+              staticenv (pk-hyperenv-get static-hyperenv lexid))
+        (pk-compile-leaf-from-thunk staticenv
+          ; We make sure the expression is attached to the environment
+          ; it captures.
+          (thunk:pk-attach-to (pk-make-hyperenv lexid staticenv)
+            (annotate 'pk-lambdacalc-mc
+              (list lexid len.args t
+                (pk-detach:do.build-fn:pk-finish-fn
+                  (join list.qq args list.rest) nil body pk-qqmeta*
+                  lexid static-hyperenv)))))))))
 
 (def pk-mc-compiler-for (build-fn)
   (fn (compiled-op body lexid static-hyperenv)
@@ -415,13 +418,16 @@
               check
                 [or _ (err "A mc parameter wasn't an identifier.")]
               qq (do.check:pk-soup-identifier qq lexid)
-              args (map check (pk-identifier-list args lexid)))
-        (pk-compile-leaf-from-thunk
-          (pk-hyperenv-get static-hyperenv lexid)
-          (thunk:pk-attach:annotate 'pk-lambdacalc-mc
-            (list lexid len.args nil
-              (pk-detach:do.build-fn:pk-finish-fn (cons qq args) nil
-                body pk-qqmeta* lexid static-hyperenv))))))))
+              args (map check (pk-identifier-list args lexid))
+              staticenv (pk-hyperenv-get static-hyperenv lexid))
+        (pk-compile-leaf-from-thunk staticenv
+          ; We make sure the expression is attached to the environment
+          ; it captures.
+          (thunk:pk-attach-to (pk-make-hyperenv lexid staticenv)
+            (annotate 'pk-lambdacalc-mc
+              (list lexid len.args nil
+                (pk-detach:do.build-fn:pk-finish-fn (cons qq args) nil
+                  body pk-qqmeta* lexid static-hyperenv)))))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tm
