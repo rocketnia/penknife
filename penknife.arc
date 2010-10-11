@@ -77,7 +77,6 @@
 ; ut   ; namespace of Lathe's utils.arc
 ; dy   ; namespace of Lathe's dyn.arc
 ; mr   ; namespace of Lathe's multival/multirule.arc
-; oc   ; namespace of Lathe's multival/order-contribs.arc
 ; rc   ; namespace of Lathe's orc/orc.arc
 ; sn   ; namespace of Lathe's imp/sniff.arc
 ; jv   ; namespace of Lathe's imp/jvm.arc
@@ -103,8 +102,8 @@
 ; (o-split-first-token seq (o test soup-whitec))
 ; (o-split-last-token seq (o test soup-whitec))
 ; (otokens seq (o test soup-whitec))
-; (slurp+ self other)                             ; rulebook
-; (o+binary self other)                           ; rulebook
+; (slurp+ a b)                                    ; rulebook
+; (o+binary a b)                                  ; rulebook
 ; (o+ first . rest)
 ; (soup->string soup)
 ; (slurp->string self)                            ; rulebook
@@ -429,7 +428,6 @@
   (use-fromwds-as ut do.lathe!utils
                   dy do.lathe!dyn
                   mr do.lathe!multival/multirule
-                  oc do.lathe!multival/order-contribs
                   rc do.lathe!orc/orc
                   oi do.lathe!orc/oiter
                   sn do.lathe!imp/sniff
@@ -722,43 +720,29 @@
       do.acc.token
       (= seq rest))))
 
-; TODO: We should really use some kind of multiple dispatch for
-; 'slurp+ and 'o+binary.
+(rc:ontypes slurp+ (a b) (rc.list rc.list) list-and-list
+  (list:+ a b))
 
-(rc:ontype slurp+ (other) rc.list list-and-list
-  (unless (.other:rc.a- rc!list)
-    (do.fail "The second argument didn't match the type \"list\"."))
-  (list:+ self other))
+(rc:ontypes slurp+ (a b) (rc.list string) list-and-string
+  (list a b))
 
-(rc:ontype slurp+ (other) rc.list list-and-string
-  (unless rc.a-!string.other
-    (do.fail "The second argument didn't match the type \"string\"."))
-  (list self other))
+(rc:ontypes slurp+ (a b) (string rc.list) string-and-list
+  (list a b))
 
-(rc:ontype slurp+ (other) string string-and-list
-  (unless (.other:rc.a- rc!list)
-    (do.fail "The second argument didn't match the type \"list\"."))
-  (list self other))
+(rc:ontypes slurp+ (a b) (string string) string-and-string
+  (list:+ a b))
 
-(rc:ontype slurp+ (other) string string-and-string
-  (unless rc.a-!string.other
-    (do.fail "The second argument didn't match the type \"string\"."))
-  (list:+ self other))
-
-(rc:ontype o+binary (other) pk-soup pk-soup-and-pk-soup
-  (unless rc.a-!pk-soup.other
-    (do.fail:+ "The second argument didn't match the type "
-               "\"pk-soup\"."))
-  (if oi.oempty.self   other
-      oi.oempty.other  self
-    (withs (rep-self rep.self
+(rc:ontypes o+binary (a b) (pk-soup pk-soup) pk-soup-and-pk-soup
+  (if oi.oempty.a  b
+      oi.oempty.b  a
+    (withs (rep-a rep.a
             ; NOTE: Jarc is fine with (let (x (y)) z ...), but it
             ; doesn't allow (let ((x) y) z ...).
-            (before (self-slurp))  (split rep-self (- len.rep-self 1))
-            (other-slurp after)  (split rep.other 1))
-      (zap car other-slurp)
+            (before (a-slurp))  (split rep-a (- len.rep-a 1))
+            (b-slurp after)     (split rep.b 1))
+      (zap car b-slurp)
       (annotate 'pk-soup
-        (join before (slurp+ self-slurp other-slurp) after)))))
+        (join before (slurp+ a-slurp b-slurp) after)))))
 
 (def o+ (first . rest)
   (ut.foldl o+binary first rest))
@@ -771,11 +755,8 @@
 (rc:ontype slurp->string () string string
   self)
 
-(mr:rule slurp->string (self) default
+(rc:ontype slurp->string () rc.any rc.any
   nil)
-
-(oc:label-prefer-labels-last slurp->string-default-last
-  'slurp->string 'default)
 
 (def soup->list (soup)
   (catch:mappend [car:or slurp->list._ throw.nil] rep.soup))
@@ -783,11 +764,8 @@
 (rc:ontype slurp->list () rc.list list
   list.self)
 
-(mr:rule slurp->list (self) default
+(rc:ontype slurp->list () rc.any rc.any
   nil)
-
-(oc:label-prefer-labels-last slurp->list-default-last
-  'slurp->list 'default)
 
 (= pk-empty-soup* (annotate 'pk-soup nil))
 
@@ -911,9 +889,7 @@
   rep.hyped-sym.1)
 
 ; This is used internally by rc.opos.
-(mr:rule rc.oiso2 (a b) pk-hyped-sym
-  (unless (all [isa _ 'pk-hyped-sym] (list a b))
-    (do.fail "The parameters weren't all of type \"pk-hyped-sym\"."))
+(rc:ontypes rc.oiso2 (a b) (pk-hyped-sym pk-hyped-sym) pk-hyped-sym
   (iso rep.a rep.b))
 
 
@@ -1254,11 +1230,8 @@
 (rc:ontype pk-call-meta args pk-fn-meta pk-fn-meta
   (apply pk-call rep.self.0 args))
 
-(mr:rule pk-call-meta (op . args) default
-  (pk-meta result (apply pk-call op args)))
-
-(oc:label-prefer-labels-last pk-call-meta-default-last
-  'pk-call-meta 'default)
+(rc:ontype pk-call-meta args rc.any rc.any
+  (pk-meta result (apply pk-call self args)))
 
 
 (mac def-pk-eval (type . body)
