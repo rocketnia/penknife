@@ -360,7 +360,8 @@
                       arg lexid static-hyperenv))
            info (memo:thunk:iflet (hyped-sym env)
                             (pk-soup-identifier-with-env arg lexid
-                              (pk-hyperenv-get static-hyperenv lexid))
+                              (pk-hyperenv-get-global
+                                static-hyperenv lexid))
                   (list hyped-sym (pk-make-hyperenv
                                     pk-hyped-sym-lexid.hyped-sym env))
                   (err "The meta of a non-identifier can't be set.")))

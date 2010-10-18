@@ -87,6 +87,16 @@
 ;             one of the 'pk-lambdacalc-[something] types.
 
 
+; TODO: Stop shadowing environments by copying them. Right now, if foo
+; doesn't have a binding yet, then running
+; [let bar 1 [mac baz [] qq.foo]] then [= baz. 1] will create a
+; binding for foo in the let form's local environment, but it'll leave
+; the global environment foo-free. This is a bug; local environments
+; should delegate to parents so their parents and cousins can see new
+; bindings they create. (Technically the only environments bindings
+; could be added to would be the global environments, so they could
+; just ignore parents in between.)
+
 (= pk-nometa* (pk-meta))
 
 (rc:ontype pk-env-shadow-sobj (binds) pk-ad-hoc-env pk-ad-hoc-env
