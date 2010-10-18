@@ -65,7 +65,7 @@
 ;
 ; < some external rules using 'def-pk-eval >
 ;
-; (pk-finish-fn args rest body meta lexid static-hyperenv)
+; (pk-finish-fn args rest body lexid static-hyperenv)
 ; (pk-thin-fn-rest-compiler compiled-op body lexid static-hyperenv)
 ; (pk-thin-fn-compiler compiled-op body lexid static-hyperenv)
 ;
@@ -345,15 +345,11 @@
               tagged-self lexid dyn-hyperenv nil nil))))
 
 
-(def pk-finish-fn (args rest body meta lexid static-hyperenv)
-  (let local-static-hyperenv
-         (pk-hyperenv-shadow-assoclist static-hyperenv
-           (map [list _ meta] (join args rest)))
-    (pk-attach:annotate 'pk-lambdacalc-thin-fn
-      (list args rest
-        (map [pk-detach:pk-fork-to-get:pk-soup-compile
-               _ lexid local-static-hyperenv]
-             body)))))
+(def pk-finish-fn (args rest body lexid static-hyperenv)
+  (pk-attach:annotate 'pk-lambdacalc-thin-fn
+    (list args rest (map [pk-detach:pk-fork-to-get:pk-soup-compile
+                           _ lexid static-hyperenv]
+                         body))))
 
 (def pk-thin-fn-rest-compiler (compiled-op body lexid static-hyperenv)
   (let token-args otokens.body
@@ -367,8 +363,9 @@
             rest (do.check:pk-soup-identifier rest lexid))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
-        (thunk:pk-finish-fn
-          args list.rest body pk-nometa* lexid static-hyperenv)))))
+        (thunk:pk-finish-fn args list.rest body lexid
+          (pk-hyperenv-shadow-assoclist static-hyperenv
+            (map [list _ pk-nometa*] (join args list.rest))))))))
 
 (def pk-thin-fn-compiler (compiled-op body lexid static-hyperenv)
   (let token-args otokens.body
@@ -379,8 +376,9 @@
             args (map check (pk-identifier-list args lexid)))
       (pk-compile-leaf-from-thunk
         (pk-hyperenv-get static-hyperenv lexid)
-        (thunk:pk-finish-fn
-          args nil body pk-nometa* lexid static-hyperenv)))))
+        (thunk:pk-finish-fn args nil body lexid
+          (pk-hyperenv-shadow-assoclist static-hyperenv
+            (map [list _ pk-nometa*] args)))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tf pk-wrap-op.pk-thin-fn-compiler)

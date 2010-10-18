@@ -38,14 +38,14 @@
 
 ; Declaration listing:
 ;
-; [. result]                              ; syntax
+; [. result]                                     ; syntax
 ;
-; [macq* name$ qq$ [args$&] rest$ body&]  ; syntax
-; [macq name$ qq$ [args$&] body&]         ; syntax
-; [mac* name$ [args$&] rest$ body&]       ; syntax
-; [mac name$ [args$&] body&]              ; syntax
-; [fun* name: [args$&] rest$ body&]       ; syntax
-; [fun name: [args$&] body&]              ; syntax
+; [macql* name$ qq$ leak$ [args$&] rest$ body&]  ; syntax
+; [macql name$ qq$ leak$ [args$&] body&]         ; syntax
+; [mac* name$ [args$&] rest$ body&]              ; syntax
+; [mac name$ [args$&] body&]                     ; syntax
+; [fun* name: [args$&] rest$ body&]              ; syntax
+; [fun name: [args$&] body&]                     ; syntax
 ;
 ; [idfn result]
 ; [list elements&]
@@ -57,7 +57,7 @@
 ; [let var$ val body&]
 
 
-[= [meta .] [wrap-op:hm qq [result] result]]
+[= [meta .] [wrap-op:hm qq leak [result] result]]
 
 
 ; TODO: Consider removing the following "arc.prn.q[...]" lines when
@@ -65,22 +65,24 @@
 ; probably has to do with the use of rulebooks.)
 
 
-arc.prn.q[Defining macq*.]
-[= macq*'meta [wrap-op:hm* our-qq [name qq args rest] body
-                our-qq.[= meta.\,name [wrap-op:hm* \,qq \,args \,rest
-                                        \,body]]]]
+arc.prn.q[Defining macql*.]
+[= macql*'meta [wrap-op:hm* our-qq ignored-leak
+                            [name qq leak args rest] body
+                 our-qq.[= meta.\,name [wrap-op:hm* \,qq \,leak
+                                                    \,args \,rest
+                                         \,body]]]]
 
-arc.prn.q[Defining macq.]
-[macq* macq our-qq [name qq args] body
-  our-qq.[= meta.\,name [wrap-op:hm \,qq \,args \,body]]]
+arc.prn.q[Defining macql.]
+[macql* macq our-qq our-leak [name qq leak args] body
+  our-qq.[= meta.\,name [wrap-op:hm \,qq \,leak \,args \,body]]]
 
 arc.prn.q[Defining mac*.]
-[macq* mac* qq [name args rest] body
-  qq.[macq* \,name \,body.qq \,args \,rest \,body]]
+[macql* mac* qq leak [name args rest] body
+  qq.[macql* \,name \,leak.qq \,leak.leak \,args \,rest \,body]]
 
 arc.prn.q[Defining mac.]
 [mac* mac [name args] body
-  qq.[macq \,name \,body.qq \,args \,body]]
+  qq.[macql \,name \,leak.qq \,leak.leak \,args \,body]]
 
 arc.prn.q[Defining fun*.]
 [mac* fun* [name args rest] body
@@ -131,7 +133,7 @@ arc.prn.q[Defining tf0.]
 
 arc.prn.q[Defining hf1.]
 [mac* hf1 [] body
-  qq.[hf [\,body.it] \,body]]
+  qq.[hf [\,leak.it] \,body]]
 
 arc.prn.q[Defining demeta, fn-if, if, do, when, and unless.]
 [= demeta arc.pk-demeta]
@@ -186,4 +188,4 @@ arc.prn.q[Defining iferr.]
 
 arc.prn.q[Defining try.]
 [mac try [body catch]
-  qq.[iferr \,catch.it \,body \,catch]]
+  qq.[iferr \,leak.it \,body \,catch]]
