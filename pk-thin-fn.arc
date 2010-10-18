@@ -99,26 +99,25 @@
 
 (= pk-nometa* (pk-meta))
 
-(rc:ontype pk-env-shadow-sobj (binds) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-env-shadow-sobj (binds)
+             pk-interactive-env pk-interactive-env
   (let rep (apply copy (rep.self)
              (ut:mappendlet (lexid (meta)) tablist.binds
                (list lexid (list pk-make-ad-hoc-binding-meta.meta))))
-    (annotate 'pk-ad-hoc-env thunk.rep)))
+    (annotate 'pk-interactive-env thunk.rep)))
 
 (def pk-copy-hyperenv (hyperenv)
   (annotate 'pk-hyperenv (copy rep.hyperenv)))
 
-; TODO: If all hyperenvironments are really going to use
-; 'pk-ad-hoc-env values to shadow environments that don't yet exist,
-; then 'pk-ad-hoc-env needs a more official name. However,
-; hyperenvironments should probably be more flexible instead.
+; TODO: See if hyperenvironments are going to use any type other than
+; 'pk-interactive-env for individual global environments.
 (def pk-hyperenv-shadow-assoclist (hyperenv binds)
   (ut:ret new-hyperenv pk-copy-hyperenv.hyperenv
     (let binds-sobjs (table)
       (each (hyped-sym meta) binds
         (let (lexid name) rep.hyped-sym
-          (or= rep.new-hyperenv.lexid (let env (pk-make-ad-hoc-env)
-                                        (list env env)))
+          (or= rep.new-hyperenv.lexid
+                 (let env (pk-make-interactive-env) (list env env)))
           (= (.name:or= do.binds-sobjs.lexid (table)) list.meta)))
       (each (lexid (local-env global-env)) rep.new-hyperenv
         (= rep.new-hyperenv.lexid

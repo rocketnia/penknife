@@ -127,7 +127,7 @@
 ; (pk-binding-set self new-value)       ; rulebook
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
-; (pk-make-ad-hoc-env)
+; (pk-make-interactive-env)
 ; (pk-staticenv-get-compile-fork staticenv hyped-varname globalenv)
 ; (pk-staticenv-default-op-compiler self)        ; rulebook
 ; pk-comment-char*                               ; value of type 'char
@@ -199,7 +199,7 @@
 ; (pk-eval-meta self lexid dyn-hyperenv)  ; rulebook
 ;
 ; pk-repllexid*  ; symbol to be used as a lexid (lexical ID)
-; pk-replenv*    ; value of type 'pk-ad-hoc-env
+; pk-replenv*    ; value of type 'pk-interactive-env
 ;
 ; (error-message error)
 ; (pktl act-on report-error nextmeta)
@@ -341,7 +341,7 @@
 ;             metadata associated with the variable represented by
 ;             this binding.
 ;
-; pk-ad-hoc-env
+; pk-interactive-env
 ;   rep: A nullary function returning a table mapping bound variable
 ;        names to singleton proper lists containing their bindings.
 ;        The table returned is the same one each time, so that
@@ -822,8 +822,8 @@
   (= rep.self.0 new-value))
 
 
-(def pk-make-ad-hoc-env ()
-  (let rep (table) (annotate 'pk-ad-hoc-env thunk.rep)))
+(def pk-make-interactive-env ()
+  (let rep (table) (annotate 'pk-interactive-env thunk.rep)))
 
 (def pk-staticenv-get-compile-fork (staticenv hyped-varname globalenv)
   (aif (aand (pk-dynenv-get-binding
@@ -835,21 +835,21 @@
         hyped-varname globalenv))))
 
 (rc:ontype pk-staticenv-default-op-compiler ()
-             pk-ad-hoc-env pk-ad-hoc-env
+             pk-interactive-env pk-interactive-env
   pk-function-call-compiler)
 
 (= pk-comment-char* #\;)
 
-; TODO: Allow read behavior customization among 'pk-ad-hoc-env values.
+; TODO: Allow read behavior customization among environments.
 (rc:ontype pk-staticenv-read-compile-tl (lexid str)
-             pk-ad-hoc-env pk-ad-hoc-env
+             pk-interactive-env pk-interactive-env
   (awhen (start-word&finish-bracket-word:comment-ignorer
            str pk-comment-char*)
     (list:pk-soup-compile-tl it lexid (pk-make-hyperenv lexid self))))
 
-; TODO: Allow literal syntax customization among 'pk-ad-hoc-env
-; values.
-(rc:ontype pk-staticenv-literal (name) pk-ad-hoc-env pk-ad-hoc-env
+; TODO: Allow literal syntax customization among environments.
+(rc:ontype pk-staticenv-literal (name)
+             pk-interactive-env pk-interactive-env
   (zap [string:or _ "nil"] name)
   (when (all digit name)
     (list int.name)))
@@ -857,27 +857,30 @@
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
 (rc:ontype pk-dynenv-ensure-binding (varname)
-             pk-ad-hoc-env pk-ad-hoc-env
+             pk-interactive-env pk-interactive-env
   (car:or= (.varname:rep.self)
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
       (list:+ "The variable \"" (or varname "nil") "\" "
               "is unbound."))))
 
-(rc:ontype pk-dynenv-get-binding (varname) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-dynenv-get-binding (varname)
+             pk-interactive-env pk-interactive-env
   (.varname:rep.self))
 
-(rc:ontype pk-dynenv-get (varname) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-dynenv-get (varname)
+             pk-interactive-env pk-interactive-env
   (pk-binding-get:pk-dynenv-ensure-binding self varname))
 
-(rc:ontype pk-dynenv-get-meta (varname) pk-ad-hoc-env pk-ad-hoc-env
+(rc:ontype pk-dynenv-get-meta (varname)
+             pk-interactive-env pk-interactive-env
   (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
 
 (rc:ontype pk-dynenv-set (varname new-value)
-             pk-ad-hoc-env pk-ad-hoc-env
+             pk-interactive-env pk-interactive-env
   (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
 
 (rc:ontype pk-dynenv-set-meta (varname new-value)
-             pk-ad-hoc-env pk-ad-hoc-env
+             pk-interactive-env pk-interactive-env
   (pk-binding-set-meta
     (pk-dynenv-ensure-binding self varname) new-value))
 
@@ -1301,7 +1304,7 @@
 ; loading from files.
 
 (= pk-repllexid* 'pk-repllexid*)
-(= pk-replenv* (pk-make-ad-hoc-env))
+(= pk-replenv* (pk-make-interactive-env))
 
 
 ; NOTE: In official Arc 3.1 and Anarki, the type of an exception is
