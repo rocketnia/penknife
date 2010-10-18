@@ -45,10 +45,20 @@
 
 ; Declaration listing:
 ;
-; pk-nometa*                       ; value of type 'pk-ad-hoc-meta
-; (pk-env-shadow-sobj self binds)                ; rulebook
+; pk-nometa*                      ; value of type 'pk-ad-hoc-meta
+; (pk-env-shadow-sobj env binds)
 ; (pk-copy-hyperenv hyperenv)
 ; (pk-hyperenv-shadow-assoclist hyperenv binds)
+;
+; (pk-staticenv-default-op-compiler)        ; external rulebook
+; (pk-staticenv-read-compile-tl lexid str)  ; external rulebook
+; (pk-staticenv-literal name)               ; external rulebook
+; (pk-dynenv-ensure-binding varname)        ; external rulebook
+; (pk-dynenv-get-binding varname)           ; external rulebook
+; (pk-dynenv-get varname)                   ; external rulebook
+; (pk-dynenv-get-meta varname)              ; external rulebook
+; (pk-dynenv-set varname new-value)         ; external rulebook
+; (pk-dynenv-set-meta varname new-value)    ; external rulebook
 ;
 ; (pk-mangle hyped-sym)
 ;
@@ -75,6 +85,15 @@
 ;
 ; Type listing:
 ;
+; pk-shadowed-env
+;   rep: A list which supports the following fields:
+;   rep._.0:  A table mapping variable names (symbols) to singleton
+;             lists containing their local bindings. The bindings may
+;             be mutated, but this table should not be.
+;   rep._.1:  A parent environment, which should be used in order to
+;             deal with everything except looking up the local
+;             bindings we keep here.
+;
 ; pk-lambdacalc-thin-fn
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A proper list of hyped symbols representing the non-rest
@@ -87,24 +106,17 @@
 ;             one of the 'pk-lambdacalc-[something] types.
 
 
-; TODO: Stop shadowing environments by copying them. Right now, if foo
-; doesn't have a binding yet, then running
-; [let bar 1 [mac baz [] qq.foo]] then [= baz. 1] will create a
-; binding for foo in the let form's local environment, but it'll leave
-; the global environment foo-free. This is a bug; local environments
-; should delegate to parents so their parents and cousins can see new
-; bindings they create. (Technically the only environments bindings
-; could be added to would be the global environments, so they could
-; just ignore parents in between.)
+; TODO: See if 'pk-shadowed-env can be implemented in such a way that
+; it doesn't end up keeping a hard reference to shadowed bindings.
+
 
 (= pk-nometa* (pk-meta))
 
-(rc:ontype pk-env-shadow-sobj (binds)
-             pk-interactive-env pk-interactive-env
-  (let rep (apply copy (rep.self)
-             (ut:mappendlet (lexid (meta)) tablist.binds
-               (list lexid (list pk-make-ad-hoc-binding-meta.meta))))
-    (annotate 'pk-interactive-env thunk.rep)))
+(def pk-env-shadow-sobj (env binds)
+  (annotate 'pk-shadowed-env
+    (list (listtab:ut:maplet (varname (meta)) tablist.binds
+            (list varname (list pk-make-ad-hoc-binding-meta.meta)))
+          env)))
 
 (def pk-copy-hyperenv (hyperenv)
   (annotate 'pk-hyperenv (copy rep.hyperenv)))
@@ -124,6 +136,44 @@
              (list (pk-env-shadow-sobj
                      local-env (or do.binds-sobjs.lexid (table)))
                    global-env))))))
+
+
+(rc:ontype pk-staticenv-default-op-compiler ()
+             pk-shadowed-env pk-shadowed-env
+  (pk-staticenv-default-op-compiler rep.self.1))
+
+(rc:ontype pk-staticenv-read-compile-tl (lexid str)
+             pk-shadowed-env pk-shadowed-env
+  (pk-staticenv-read-compile-tl rep.self.1 lexid str))
+
+(rc:ontype pk-staticenv-literal (name) pk-shadowed-env pk-shadowed-env
+  (pk-staticenv-literal rep.self.1 name))
+
+(rc:ontype pk-dynenv-ensure-binding (varname)
+             pk-shadowed-env pk-shadowed-env
+  (aif rep.self.0.varname
+    car.it
+    (pk-dynenv-ensure-binding rep.self.1 varname)))
+
+(rc:ontype pk-dynenv-get-binding (varname)
+             pk-shadowed-env pk-shadowed-env
+  (or rep.self.0.varname (pk-dynenv-get-binding rep.self.1 varname)))
+
+(rc:ontype pk-dynenv-get (varname) pk-shadowed-env pk-shadowed-env
+  (pk-binding-get:pk-dynenv-ensure-binding self varname))
+
+(rc:ontype pk-dynenv-get-meta (varname)
+             pk-shadowed-env pk-shadowed-env
+  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
+
+(rc:ontype pk-dynenv-set (varname new-value)
+             pk-shadowed-env pk-shadowed-env
+  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
+
+(rc:ontype pk-dynenv-set-meta (varname new-value)
+             pk-shadowed-env pk-shadowed-env
+  (pk-binding-set-meta
+    (pk-dynenv-ensure-binding self varname) new-value))
 
 
 ; Pick an unlikely-to-write name without being too obscure and without

@@ -197,8 +197,7 @@
 ; 'pk-qq-basis value contains the captured hyperenvironment anyway, is
 ; there really a point in restricting access to it?
 ;
-; TODO: Once more of the kinks are worked out, we'll have to add
-; another compilation phase in order to support things like
+; TODO: Add another compilation phase in order to support things like
 ; [let foo 1 [mac bar [] qq.foo]] in modules. Macros will still need
 ; to be expanded most of the way during the initial module
 ; compilation, but their particular closure identities should not be
