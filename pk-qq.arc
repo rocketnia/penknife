@@ -109,11 +109,18 @@
 ;             to use when compiling this soup.
 ;   rep._.2:  A 'pk-soup value.
 ;
+; pk-qq-basis
+;   rep: A list which supports the following fields:
+;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.1:  A hyperenvironment containing global static environments
+;             to use when compiling the soup resulting from a
+;             quasiquote form that uses this basis.
+;
 ; pk-lambdacalc-qq
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  An expression of one of the 'pk-lambdacalc-[something]
-;             types, which will return a 'pk-attached-soup value to
-;             use as the basis of this quasiquote form. The basis will
+;             types, which will return a 'pk-qq-basis value to use as
+;             the basis of this quasiquote form. The basis will
 ;             provide the lexid and the hyperenvironment to include in
 ;             the new 'pk-attached-soup value resulting from this
 ;             quasiquote form.
@@ -161,23 +168,22 @@
 ;   rep._.3:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a function to be wrapped up as
 ;             a macro op. The first argument to the function will be
-;             an empty 'pk-attached-soup value corresponding to the
+;             a 'pk-qq-basis value corresponding to the
 ;             hyperenvironment and lexid captured as this
 ;             'pk-lambdacalc-mc expression evaluates. The second
-;             argument will be another empty 'pk-attached-soup value
+;             argument will be another 'pk-qq-basis value
 ;             corresponding to the place the macro is used. Further
 ;             arguments to the function will be words parsed out of
-;             the body of the form the macro op is used in, also
-;             wrapped up as 'pk-attached-soup values. If this is a
-;             varargs macro op, the final argument of the function
-;             will be one more 'pk-attached-soup value corresponding
-;             to the soup that remains after those words have been
-;             parsed out.
+;             the body of the form the macro op is used in, wrapped up
+;             as 'pk-attached-soup values. If this is a varargs macro
+;             op, the final argument of the function will be another
+;             'pk-attached-soup value corresponding to the soup that
+;             remains after those words have been parsed out.
 
 
 ; TODO: Change the quasiquotation operators so that they receive their
 ; basis lexid from the compilation context, rather than from their
-; dynamic value as a 'pk-attached-soup. The macro "mac" expands to
+; dynamic values as 'pk-qq-basis values. The macro "mac" expands to
 ; code that uses the macro "macql", which expands to code that defines
 ; a macro using the non-macro syntax "hm" (defined here in this
 ; plugin). Currently, [let foo 1 [mac bar [] qq.foo]] doesn't work as
@@ -258,9 +264,8 @@
   self)
 
 (def pk-eval-qq (basis dsl handle-splice)
-  (case type.basis pk-attached-soup nil
-    (err:+ "A value other than a 'pk-attached-soup value was used as "
-           "the basis of a quasiquote form."))
+  (case type.basis pk-qq-basis nil
+    (err "The basis of a quasiquote form wasn't a 'pk-qq-basis."))
   (withs (basis-lexid rep.basis.0
           soup-dsl (afn (dsl)
                      (apply o+ pk-empty-soup*
@@ -390,12 +395,10 @@
                   (pk-make-hyperenv generated-lexid dynenv))
               func-result
                 (apply pk-call func
-                  (annotate 'pk-attached-soup                 ; qq
-                    (list generated-lexid generated-hyperenv
-                      pk-empty-soup*))
-                  (annotate 'pk-attached-soup                 ; leak
-                    (list lexid global-static-hyperenv
-                      pk-empty-soup*))
+                  (annotate 'pk-qq-basis                        ; qq
+                    (list generated-lexid generated-hyperenv))
+                  (annotate 'pk-qq-basis                        ; leak
+                    (list lexid global-static-hyperenv))
                   args))
         (case type.func-result pk-attached-soup nil
           (err "The result of a macro wasn't a 'pk-attached-soup."))
