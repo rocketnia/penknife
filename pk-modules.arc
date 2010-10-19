@@ -39,11 +39,11 @@
 ; This module system aims to fix that problem by instantiating a new
 ; instance of a library each time it's used.
 ;
-; First, the module is parsed and compiled (in a process which will
-; probably happen mostly invisibly, the first time the module is
-; constructed). Then other code can construct instances of the module,
-; and this will be done by creating a new base environment and
-; executing the already compiled expressions on that environment.
+; First, the module is parsed (in a process which will probably happen
+; mostly invisibly, the first time the module is constructed). Then
+; other code can construct instances of the module, and this will be
+; done by creating a new base environment and executing the already
+; compiled expressions on that environment.
 ;
 ; TODO: Actually make a way to construct modules from within Penknife,
 ; so that it does what's described above.
@@ -65,17 +65,17 @@
 
 (def pk-mutate-with-module (lexid env str act-on report-error prompt)
   (zap newline-normalizer str)
-  ; NOTE: If 'pk-staticenv-read-compile-tl raises an error while
-  ; reading, rather than while compiling, this could loop infinitely.
-  ; We plan to let the environment support command syntax we can't
+  ; NOTE: If 'pk-staticenv-read-parse-tl raises an error while
+  ; reading, rather than while parsing, this could loop infinitely. We
+  ; plan to let the environment support command syntax we can't
   ; predict, such as multiple-word commands or commands with
   ; mismatched brackets, so there isn't an obvious way to separate the
-  ; reading and compiling phases.
+  ; reading phase from the parsing phase.
   (withs (rev-commands nil
           result (pktl act-on report-error
                    (fn ()
                      do.prompt.str  ; Wait for more input.
-                     (whenlet (attached) (pk-staticenv-read-compile-tl
+                     (whenlet (attached) (pk-staticenv-read-parse-tl
                                            env lexid str)
                        (withs (attached-hyperenv rep.attached.0
                                without (pk-hyperenv-without

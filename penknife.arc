@@ -112,11 +112,11 @@
 ; pk-empty-soup*            ; value of type 'pk-soup
 ; (pk-soup-singleton elem)
 ;
-; (pk-fork-to-get self)                                   ; rulebook
-; (pk-fork-to-set self new-value)                         ; rulebook
-; (pk-fork-to-meta self)                                  ; rulebook
-; (pk-fork-to-op-method self)                             ; rulebook
-; (pk-fork-to-op compiled-op body lexid static-hyperenv)
+; (pk-fork-to-get self)                               ; rulebook
+; (pk-fork-to-set self new-value)                     ; rulebook
+; (pk-fork-to-meta self)                              ; rulebook
+; (pk-fork-to-op-method self)                         ; rulebook
+; (pk-fork-to-op op-fork body lexid static-hyperenv)
 ;
 ; (pk-meta . args)                      ; macro
 ; (pk-demeta meta)
@@ -128,17 +128,17 @@
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-make-interactive-env)
-; (pk-staticenv-get-compile-fork staticenv hyped-varname globalenv)
-; (pk-staticenv-default-op-compiler self)        ; rulebook
-; pk-comment-char*                               ; value of type 'char
-; (pk-staticenv-read-compile-tl self lexid str)  ; rulebook
-; (pk-staticenv-literal self name)               ; rulebook
-; (pk-dynenv-ensure-binding self varname)        ; rulebook
-; (pk-dynenv-get-binding self varname)           ; rulebook
-; (pk-dynenv-get self varname)                   ; rulebook
-; (pk-dynenv-get-meta self varname)              ; rulebook
-; (pk-dynenv-set self varname)                   ; rulebook
-; (pk-dynenv-set-meta self varname)              ; rulebook
+; (pk-staticenv-get-var-forker staticenv hyped-varname globalenv)
+; (pk-staticenv-default-op-parser self)        ; rulebook
+; pk-comment-char*                             ; value of type 'char
+; (pk-staticenv-read-parse-tl self lexid str)  ; rulebook
+; (pk-staticenv-literal self name)             ; rulebook
+; (pk-dynenv-ensure-binding self varname)      ; rulebook
+; (pk-dynenv-get-binding self varname)         ; rulebook
+; (pk-dynenv-get self varname)                 ; rulebook
+; (pk-dynenv-get-meta self varname)            ; rulebook
+; (pk-dynenv-set self varname)                 ; rulebook
+; (pk-dynenv-set-meta self varname)            ; rulebook
 ;
 ; (pk-hyped-sym-lexid hyped-sym)
 ; (pk-hyped-sym-name hyped-sym)
@@ -168,12 +168,12 @@
 ; (pk-detach . body)              ; macro
 ; (pk-detachmap seq)
 ;
-; (pk-compile-leaf-from-thunk staticenv getter)
-; (pk-compile-literal-from-thunk compile-value staticenv)
-; (pk-compile-call-from-thunk compile-op-and-body op-compiler)
-; (pk-compile-fork-from-op op-compiler)
+; (pk-parse-leaf-from-thunk staticenv getter)
+; (pk-parse-literal-from-thunk value-parser staticenv)
+; (pk-parse-call-from-thunk op-and-body-parser op-parser)
+; (pk-var-forker-from-op op-parser)
 ;
-; (pk-function-call-compiler compiled-op body lexid static-hyperenv)
+; (pk-function-call-parser op-fork body lexid static-hyperenv)
 ;
 ; (pk-alpha-id-char char)
 ; (pk-infix-id-char char)
@@ -181,9 +181,9 @@
 ; (pk-soup-identifier-with-env soup lexid env)
 ; (pk-soup-identifier soup lexid)
 ; (pk-identifier-list soup lexid env)
-; (pk-soup-compile-tl soup lexid static-hyperenv)   ; rulebook
-; (pk-soup-compile soup lexid static-hyperenv)      ; rulebook
-; (pk-sip-compile self lexid static-hyperenv)       ; rulebook
+; (pk-parse-tl soup lexid static-hyperenv)          ; rulebook
+; (pk-parse soup lexid static-hyperenv)             ; rulebook
+; (pk-parse-sip self lexid static-hyperenv)         ; rulebook
 ;
 ; pk-defuse-param*            ; value satisfying dy!aparam
 ; (pk-defuse body afterward)
@@ -207,7 +207,7 @@
 ; (pkrepl (o str missing))
 ; (pkdo lexid env str)
 ; (pkload lexid env filename)
-; (pkcomp str)
+; (pkparse str)
 ;
 ;
 ; Type listing:
@@ -311,7 +311,7 @@
 ;        evaluated for its metadata so that that metadata can be
 ;        returned as the non-metadata result of this expression.
 ;
-; pk-compile-fork
+; pk-parse-fork
 ;   rep: A table which supports the following fields:
 ;   rep._!get:   A value which, when called using 'pk-call, accepts no
 ;                arguments and returns a 'pk-attached-lambdacalc
@@ -326,12 +326,11 @@
 ;                value, representing an expression that returns a
 ;                value to be used by a top-level command interpreter.
 ;   rep._!op:    A value which, when called using 'pk-call or
-;                'pk-call-meta, accepts this very 'pk-compile-fork
-;                value (the compiled operator), a 'pk-soup value (the
-;                uncompiled body), an lexid (lexical ID), and a static
-;                hyperenvironment (a table mapping lexids to local and
-;                global static environments) and returns a
-;                'pk-compile-fork value representing the compiled
+;                'pk-call-meta, accepts this very 'pk-parse-fork value
+;                (the parsed operator), a 'pk-soup value (the unparsed
+;                body), an lexid (lexical ID), and a static
+;                hyperenvironment (a 'pk-hyperenv value) and returns a
+;                'pk-parse-fork value representing the parsed
 ;                expression.
 ;
 ; pk-ad-hoc-binding
@@ -391,37 +390,30 @@
 ;
 ; pk-ad-hoc-meta
 ;   rep: A table which supports the following fields:
-;   rep._!result:         The value to use as the result in any
-;                         context other than the top-level one. This
-;                         is the only non-optional field; if this is
-;                         nil, then the value used is actually nil
-;                         itself.
-;   rep._!action:         If present, a singleton proper list
-;                         containing a Penknife value which, when
-;                         called with no arguments using 'pk-call,
-;                         will imperatively perform some additional
-;                         action which is meant to be done instead of
-;                         writing the result to the REPL.
-;   rep._!quit:           If present, a singleton proper list
-;                         indicating that the Penknife REPL session
-;                         should exit and return the contained value
-;                         to the Arc REPL.
-;   rep._!compile-fork:   If present, a singleton proper list
-;                         containing a Penknife function which, when
-;                         given a 'pk-hyped-sym variable name and the
-;                         global environment corresponding to the
-;                         environment it's looked up in, will return
-;                         the 'pk-compile-fork value to return when
-;                         compiling an appearance of the variable when
-;                         its environment as a static environment. If
-;                         If instead this is nil, then a default
-;                         compile fork should be constructed according
-;                         to that environment's own behavior.
-;   rep._!error:          If present, a singleton proper list
-;                         containing the value to raise as an error
-;                         message whenever the result, but not this
-;                         metadata, is looked up in a binding or
-;                         environment.
+;   rep._!result:      The value to use as the result in any context
+;                      other than the top-level one. This is the only
+;                      non-optional field; if this is nil, then the
+;                      value used is actually nil itself.
+;   rep._!action:      If present, a singleton proper list containing
+;                      a Penknife value which, when called with no
+;                      arguments using 'pk-call, will imperatively
+;                      perform some additional action which is meant
+;                      to be done instead of writing the result to the
+;                      REPL.
+;   rep._!quit:        If present, a singleton proper list indicating
+;                      that the Penknife REPL session should exit and
+;                      return the contained value to the Arc REPL.
+;   rep._!var-forker:  If present, a singleton proper list containing
+;                      a Penknife function which, when given a
+;                      'pk-hyped-sym variable name and a global static
+;                      environment, will return a 'pk-parse-fork
+;                      value. If instead this is nil, then a default
+;                      parse fork should be constructed according to
+;                      that environment's own behavior.
+;   rep._!error:       If present, a singleton proper list containing
+;                      the value to raise as an error message whenever
+;                      the result, but not this metadata, is looked up
+;                      in a binding or environment.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -774,21 +766,21 @@
   (annotate 'pk-soup (list:.elem:case type.elem char string list)))
 
 
-(rc:ontype pk-fork-to-get () pk-compile-fork pk-compile-fork
+(rc:ontype pk-fork-to-get () pk-parse-fork pk-parse-fork
   (pk-call rep.self!get))
 
-(rc:ontype pk-fork-to-set (new-value) pk-compile-fork pk-compile-fork
+(rc:ontype pk-fork-to-set (new-value) pk-parse-fork pk-parse-fork
   (pk-call rep.self!set new-value))
 
-(rc:ontype pk-fork-to-meta () pk-compile-fork pk-compile-fork
+(rc:ontype pk-fork-to-meta () pk-parse-fork pk-parse-fork
   (pk-call rep.self!meta))
 
-(rc:ontype pk-fork-to-op-method () pk-compile-fork pk-compile-fork
+(rc:ontype pk-fork-to-op-method () pk-parse-fork pk-parse-fork
   rep.self!op)
 
-(def pk-fork-to-op (compiled-op body lexid static-hyperenv)
-  (pk-call pk-fork-to-op-method.compiled-op
-    compiled-op body lexid static-hyperenv))
+(def pk-fork-to-op (op-fork body lexid static-hyperenv)
+  (pk-call pk-fork-to-op-method.op-fork
+    op-fork body lexid static-hyperenv))
 
 
 (mac pk-meta args
@@ -825,27 +817,27 @@
 (def pk-make-interactive-env ()
   (let rep (table) (annotate 'pk-interactive-env thunk.rep)))
 
-(def pk-staticenv-get-compile-fork (staticenv hyped-varname globalenv)
+(def pk-staticenv-get-var-forker (staticenv hyped-varname globalenv)
   (aif (aand (pk-dynenv-get-binding
                staticenv pk-hyped-sym-name.hyped-varname)
-             (!compile-fork:rep:pk-binding-get-meta car.it))
+             (!var-forker:rep:pk-binding-get-meta car.it))
     (pk-call car.it hyped-varname globalenv)
-    (let op-compiler pk-staticenv-default-op-compiler.staticenv
-      (pk-call pk-compile-fork-from-op.op-compiler
+    (let op-parser pk-staticenv-default-op-parser.staticenv
+      (pk-call pk-var-forker-from-op.op-parser
         hyped-varname globalenv))))
 
-(rc:ontype pk-staticenv-default-op-compiler ()
+(rc:ontype pk-staticenv-default-op-parser ()
              pk-interactive-env pk-interactive-env
-  pk-function-call-compiler)
+  pk-function-call-parser)
 
 (= pk-comment-char* #\;)
 
 ; TODO: Allow read behavior customization among environments.
-(rc:ontype pk-staticenv-read-compile-tl (lexid str)
+(rc:ontype pk-staticenv-read-parse-tl (lexid str)
              pk-interactive-env pk-interactive-env
   (awhen (start-word&finish-bracket-word:comment-ignorer
            str pk-comment-char*)
-    (list:pk-soup-compile-tl it lexid (pk-make-hyperenv lexid self))))
+    (list:pk-parse-tl it lexid (pk-make-hyperenv lexid self))))
 
 ; TODO: Allow literal syntax customization among environments.
 (rc:ontype pk-staticenv-literal (name)
@@ -1015,43 +1007,43 @@
   `(map [pk-detach _] (pk-noattach ,seq)))
 
 
-(def pk-compile-leaf-from-thunk (staticenv getter)
+(def pk-parse-leaf-from-thunk (staticenv getter)
   (zap memo getter)
-  (annotate 'pk-compile-fork
+  (annotate 'pk-parse-fork
     (obj get   getter
-         set   [err:+ "An attempt was made to compile an ineligible "
+         set   [err:+ "An attempt was made to parse an ineligible "
                       "form for setting."]
          meta  getter
-         op    pk-staticenv-default-op-compiler.staticenv)))
+         op    pk-staticenv-default-op-parser.staticenv)))
 
-(def pk-compile-literal-from-thunk (compile-value staticenv)
-  (pk-compile-leaf-from-thunk staticenv
+(def pk-parse-literal-from-thunk (value-parser staticenv)
+  (pk-parse-leaf-from-thunk staticenv
     (thunk:pk-attach:annotate 'pk-lambdacalc-literal
-      (list:pk-noattach call.compile-value))))
+      (list:pk-noattach call.value-parser))))
 
-; The 'compile-op-and-body parameter should be a function that returns
+; The 'op-and-body-parser parameter should be a function that returns
 ; a proper list of 'pk-attached-lambdacalc values representing the
 ; function and arguments.
-(def pk-compile-call-from-thunk (compile-op-and-body op-compiler)
-  (zap memo compile-op-and-body)
-  (annotate 'pk-compile-fork
+(def pk-parse-call-from-thunk (op-and-body-parser op-parser)
+  (zap memo op-and-body-parser)
+  (annotate 'pk-parse-fork
     (obj get   (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call
-                 (pk-detachmap call.compile-op-and-body))
-         set   (let compile-set
+                 (pk-detachmap call.op-and-body-parser))
+         set   (let set-parser
                       (memo:thunk:pk-attach:annotate
                         'pk-lambdacalc-call-set
-                        (pk-detachmap call.compile-op-and-body))
+                        (pk-detachmap call.op-and-body-parser))
                  [pk-attach:annotate 'pk-lambdacalc-call
-                   (pk-detachmap:list call.compile-set _)])
+                   (pk-detachmap:list call.set-parser _)])
          meta  (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call-meta
-                 (pk-detachmap call.compile-op-and-body))
-         op    op-compiler)))
+                 (pk-detachmap call.op-and-body-parser))
+         op    op-parser)))
 
-(def pk-compile-fork-from-op (op-compiler)
+(def pk-var-forker-from-op (op-parser)
   (fn (hyped-varname globalenv)
     (let hyperenv (pk-make-hyperenv
                     pk-hyped-sym-lexid.hyped-varname globalenv)
-      (annotate 'pk-compile-fork
+      (annotate 'pk-parse-fork
         (obj get   (memo:thunk:pk-attach-to hyperenv
                      (annotate 'pk-lambdacalc-var hyped-varname))
              set   [pk-attach-to hyperenv
@@ -1059,16 +1051,15 @@
                        (list hyped-varname pk-detach._))]
              meta  (memo:thunk:pk-attach-to hyperenv
                      (annotate 'pk-lambdacalc-var-meta hyped-varname))
-             op    op-compiler)))))
+             op    op-parser)))))
 
 
-(def pk-function-call-compiler
-       (compiled-op body lexid static-hyperenv)
-  (pk-compile-call-from-thunk
-    (thunk:cons pk-fork-to-get.compiled-op
-      (map [pk-fork-to-get:pk-soup-compile _ lexid static-hyperenv]
+(def pk-function-call-parser (op-fork body lexid static-hyperenv)
+  (pk-parse-call-from-thunk
+    (thunk:cons pk-fork-to-get.op-fork
+      (map [pk-fork-to-get:pk-parse _ lexid static-hyperenv]
            otokens.body))
-    (pk-staticenv-default-op-compiler:pk-hyperenv-get
+    (pk-staticenv-default-op-parser:pk-hyperenv-get
       static-hyperenv lexid)))
 
 
@@ -1116,16 +1107,16 @@
           (err "An identifier list wasn't a 'pk-sip-brackets."))
         (map [pk-soup-identifier _ lexid] (otokens rep.soup.0)))))
 
-(mr:rule pk-soup-compile-tl (soup lexid static-hyperenv) expression
-  (pk-fork-to-meta:pk-soup-compile soup lexid static-hyperenv))
+(mr:rule pk-parse-tl (soup lexid static-hyperenv) expression
+  (pk-fork-to-meta:pk-parse soup lexid static-hyperenv))
 
-(mr:rule pk-soup-compile (soup lexid static-hyperenv) one-sip
+(mr:rule pk-parse (soup lexid static-hyperenv) one-sip
   (when (or (oi.olen> soup 1) oi.oempty.soup soup->string.soup)
     (do.fail "The word wasn't simply a single non-character."))
-  (pk-sip-compile (oref soup 0) lexid static-hyperenv))
+  (pk-parse-sip (oref soup 0) lexid static-hyperenv))
 
 ; TODO: See if this can be simpler.
-(mr:rule pk-soup-compile (soup lexid static-hyperenv) identifier
+(mr:rule pk-parse (soup lexid static-hyperenv) identifier
   (iflet (hyped-sym env) (pk-soup-identifier-with-env soup lexid
                            (pk-hyperenv-get static-hyperenv lexid))
     (let (local-env global-env) (pk-hyperenv-get-both
@@ -1137,23 +1128,23 @@
                                   lexid)
       (let name pk-hyped-sym-name.hyped-sym
         (iflet (literal) (pk-staticenv-literal local-env name)
-          (pk-compile-literal-from-thunk thunk.literal local-env)
-          (pk-staticenv-get-compile-fork
+          (pk-parse-literal-from-thunk thunk.literal local-env)
+          (pk-staticenv-get-var-forker
             local-env hyped-sym global-env))))
     (do.fail "The word wasn't an identifier.")))
 
-(mr:rule pk-soup-compile (soup lexid static-hyperenv) infix
+(mr:rule pk-parse (soup lexid static-hyperenv) infix
   (iflet (left op right) (o-split-last-token soup
                            [~case type._ char pk-infix-id-char._])
     (if oi.oempty.left
       (do.fail:+ "The word started with its only infix operator, so "
                  "it wasn't an infix form.")
-      (ut:lets it (pk-soup-compile op lexid static-hyperenv)
+      (ut:lets it (pk-parse op lexid static-hyperenv)
                it (pk-fork-to-op it left lexid static-hyperenv)
                   (pk-fork-to-op it right lexid static-hyperenv)))
     (do.fail "The word didn't contain an infix operator.")))
 
-(mr:rule pk-soup-compile (soup lexid static-hyperenv) prefix
+(mr:rule pk-parse (soup lexid static-hyperenv) prefix
   (let (op bodies) (o-rtrim soup rc.a-!pk-sip-brackets)
     (unless (or (and oi.oempty.op (oi.olen> bodies 1))
                 (and (pk-soup-identifier op lexid)
@@ -1162,21 +1153,21 @@
                  "preceded by a bracket form or an identifier."))
     (zap soup->list bodies)
     (= op (if oi.oempty.op
-            (pk-sip-compile pop.bodies lexid static-hyperenv)
-            (pk-soup-compile op lexid static-hyperenv)))
+            (pk-parse-sip pop.bodies lexid static-hyperenv)
+            (pk-parse op lexid static-hyperenv)))
     (each body (map car:rep bodies)
       (zap [pk-fork-to-op _ body lexid static-hyperenv] op))
     op))
 
-(rc:ontype pk-sip-compile (lexid static-hyperenv)
+(rc:ontype pk-parse-sip (lexid static-hyperenv)
              pk-sip-brackets pk-sip-brackets
   (zap car:rep self)
   (iflet (margin op rest) o-split-first-token.self
-    (let compiled-op (pk-soup-compile op lexid static-hyperenv)
-      (pk-fork-to-op compiled-op rest lexid static-hyperenv))
+    (let op-fork (pk-parse op lexid static-hyperenv)
+      (pk-fork-to-op op-fork rest lexid static-hyperenv))
     (do.fail "The syntax was an empty pair of brackets.")))
 
-(rc:ontype pk-sip-compile (lexid static-hyperenv)
+(rc:ontype pk-parse-sip (lexid static-hyperenv)
              pk-sip-hype-staticenv pk-sip-hype-staticenv
   (withs ((inner-lexid globalenv soup) rep.self
           tokens otokens.soup)
@@ -1184,7 +1175,7 @@
       (do.fail:+ "The syntax was a 'pk-sip-hype-staticenv without "
                  "exactly one word in it."))
     (let global-hyperenv (pk-make-hyperenv inner-lexid globalenv)
-      (pk-soup-compile car.tokens inner-lexid
+      (pk-parse car.tokens inner-lexid
         (pk-hyperenv-overlap global-hyperenv static-hyperenv)))))
 
 
@@ -1292,11 +1283,11 @@
 (def-pk-eval-meta pk-attached-lambdacalc
   (pk-eval-meta self.1 lexid self.0))
 
-(def-pk-eval-meta pk-compile-fork
+(def-pk-eval-meta pk-parse-fork
   (pk-eval-meta pk-fork-to-meta.tagged-self lexid dyn-hyperenv))
 
 (def-pk-eval-meta pk-soup
-  (pk-eval-meta (pk-soup-compile tagged-self lexid dyn-hyperenv)
+  (pk-eval-meta (pk-parse tagged-self lexid dyn-hyperenv)
     lexid dyn-hyperenv))
 
 
@@ -1339,17 +1330,17 @@
 
 (def pktl-stream (lexid env str act-on report-error prompt)
   (zap newline-normalizer str)
-  ; NOTE: If 'pk-staticenv-read-compile-tl raises an error while
-  ; reading, rather than while compiling, this could loop infinitely.
-  ; We plan to let the environment support command syntax we can't
+  ; NOTE: If 'pk-staticenv-read-parse-tl raises an error while
+  ; reading, rather than while parsing, this could loop infinitely. We
+  ; plan to let the environment support command syntax we can't
   ; predict, such as multiple-word commands or commands with
   ; mismatched brackets, so there isn't an obvious way to separate the
-  ; reading and compiling phases.
+  ; reading phase from the parsing phase.
   (let hyperenv (pk-make-hyperenv lexid env)
     (pktl act-on report-error
       (fn ()
         do.prompt.str     ; Wait for more input.
-        (whenlet (expr) (pk-staticenv-read-compile-tl env lexid str)
+        (whenlet (expr) (pk-staticenv-read-parse-tl env lexid str)
           (list:pk-eval-meta expr lexid hyperenv))))))
 
 ; NOTE: Rainbow's profiler doesn't like function calls in optional
@@ -1379,8 +1370,8 @@
 (def pkload (lexid env filename)
   (w/infile str filename (pkdo lexid env str)))
 
-; This is just a convenience for compiling things at the REPL.
-(def pkcomp (str)
+; This is just a convenience for parsing things at the REPL.
+(def pkparse (str)
   ; NOTE: Rainbow treats a&b.c as (andf a b.c).
-  (pk-compile-to-get:pk-compile (start-word&finish-bracket-word str)
+  (pk-fork-to-get:pk-parse (start-word&finish-bracket-word str)
     pk-repllexid* (pk-make-hyperenv pk-repllexid* pk-replenv*)))

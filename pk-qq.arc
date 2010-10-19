@@ -77,7 +77,7 @@
 ; < some external rules using 'def-pk-eval >
 ; (pk-captures-hyperenv self)                     ; external rule
 ; < some external rules using 'def-pk-optimize-subexpr >
-; (pk-qq-compiler compiled-op body lexid static-hyperenv)
+; (pk-qq-parser op-fork body lexid static-hyperenv)
 ;
 ; (pk-hyperenv-lexids hyperenv)
 ;
@@ -86,8 +86,8 @@
 ; (pk-captures-hyperenv self)                          ; external rule
 ; < some external rules using 'def-pk-optimize-subexpr >
 ; pk-qqmeta*                           ; value of type 'pk-ad-hoc-meta
-; (pk-mc-rest-compiler-for build-fn)
-; (pk-mc-compiler-for build-fn)
+; (pk-mc-rest-parser-for build-fn)
+; (pk-mc-parser-for build-fn)
 ;
 ; Penknife  [tm qq$ leak$ [args$&] body&]
 ; Penknife  [tm* qq$ leak$ [args$&] rest$ body&]
@@ -163,9 +163,9 @@
 ;             resulting macros to have some environment to use for the
 ;             main basis of their quasiquote operators' generated
 ;             code.
-;   rep._.1:  The number of non-rest arguments to the macro op
-;             compiler. This is the minimum number of words that can
-;             appear in the body of any form using the macro op.
+;   rep._.1:  The number of non-rest arguments to the macro op parser.
+;             This is the minimum number of words that can appear in
+;             the body of any form using the macro op.
 ;   rep._.2:  A boolean indicating, if true, that this is a varargs
 ;             macro operator, which is to say that any part of the
 ;             form body that isn't parsed into words for the regular
@@ -197,13 +197,13 @@
 ; 'pk-qq-basis value contains the captured hyperenvironment anyway, is
 ; there really a point in restricting access to it?
 ;
-; TODO: Add another compilation phase in order to support things like
-; [let foo 1 [mac bar [] qq.foo]] in modules. Macros will still need
-; to be expanded most of the way during the initial module
-; compilation, but their particular closure identities should not be
-; shared across different instances of the module. Therefore, a macro
-; will need a dynamic value that keeps track of its captured
-; hyperenvironment, and there'll need to be an intermediate syntax for
+; TODO: Add a compilation phase after parsing in order to support
+; things like [let foo 1 [mac bar [] qq.foo]] in modules. Macros will
+; still need to be expanded during the parsing phase, but their
+; particular closure identities should not be shared across different
+; instances of the module. Therefore, a macro will need a dynamic
+; value that keeps track of its captured hyperenvironment, and
+; there'll need to be an intermediate syntax in the parse tree for
 ; resolving variables in a command using a macro's hyperenvironment
 ; before that command has started to evaluate.
 
@@ -320,7 +320,7 @@
        (,'quasiquote ,(optimize-dsl self.1))
        call)))
 
-(def pk-qq-compiler (compiled-op body lexid static-hyperenv)
+(def pk-qq-parser (op-fork body lexid static-hyperenv)
   (let parse-into-dsl
          (afn (soup)
            (accum acc
@@ -342,7 +342,7 @@
                               (do.acc
                                 `(splice
                                    ,(pk-detach:pk-fork-to-get
-                                      (pk-soup-compile
+                                      (pk-parse
                                         word lexid static-hyperenv))))
                               (= soup rest))
                          (case type.esccode pk-sip-brackets
@@ -353,9 +353,7 @@
                                       "word in it."))
                              (do.acc `(splice
                                         ,(pk-detach:pk-fork-to-get
-                                           (pk-soup-compile
-                                             car.words
-                                             lexid
+                                           (pk-parse car.words lexid
                                              static-hyperenv))))
                              (= soup rest))
                            (err:+ "An unrecognized quasiquote escape "
@@ -364,10 +362,9 @@
                             "of some quasiquoted soup."))
                    (do (do.acc `(bracket ,@(self rep.trigger.0)))
                        (= soup rest)))))))
-    (pk-compile-leaf-from-thunk
-      (pk-hyperenv-get static-hyperenv lexid)
+    (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
       (thunk:pk-attach:annotate 'pk-lambdacalc-qq
-        (list (pk-detach pk-fork-to-get.compiled-op)
+        (list (pk-detach pk-fork-to-get.op-fork)
               do.parse-into-dsl.body)))))
 
 
@@ -376,7 +373,7 @@
 
 
 (def pk-wrapmc (dyn-hyperenv arity varargs func)
-  (fn (compiled-op body lexid static-hyperenv)
+  (fn (op-fork body lexid static-hyperenv)
     (with (args (n-of arity
                   (iflet (margin word rest) o-split-first-token.body
                     (do (= body rest)
@@ -422,7 +419,7 @@
           (unless single.result-soup
             (err:+ "The result of a macro didn't contain exactly one "
                    "word."))
-          (pk-soup-compile car.result-soup result-lexid
+          (pk-parse car.result-soup result-lexid
             (pk-hyperenv-overlap
               result-hyperenv static-hyperenv)))))))
 
@@ -438,10 +435,10 @@
      ,(pk-optimize-subexpr
         self.3 lexid dyn-hyperenv local-lex env-lex)))
 
-(= pk-qqmeta* pk-wrap-op.pk-qq-compiler)
+(= pk-qqmeta* pk-wrap-op.pk-qq-parser)
 
-(def pk-mc-rest-compiler-for (build-fn)
-  (fn (compiled-op body lexid static-hyperenv)
+(def pk-mc-rest-parser-for (build-fn)
+  (fn (op-fork body lexid static-hyperenv)
     (let token-args otokens.body
       (unless (<= 5 len.token-args)
         (err "A mc-rest body didn't have at least five words in it."))
@@ -453,7 +450,7 @@
               leak (do.check:pk-soup-identifier leak lexid)
               args (map check (pk-identifier-list args lexid))
               rest (do.check:pk-soup-identifier rest lexid))
-        (pk-compile-leaf-from-thunk
+        (pk-parse-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           ; We make sure the expression is attached to the
           ; hyperenvironment it captures.
@@ -467,8 +464,8 @@
                           (map [list _ pk-nometa*]
                                (join args list.rest)))))))))))))
 
-(def pk-mc-compiler-for (build-fn)
-  (fn (compiled-op body lexid static-hyperenv)
+(def pk-mc-parser-for (build-fn)
+  (fn (op-fork body lexid static-hyperenv)
     (let token-args otokens.body
       (unless (<= 4 len.token-args)
         (err "A mc body didn't have at least four words in it."))
@@ -478,7 +475,7 @@
               qq (do.check:pk-soup-identifier qq lexid)
               leak (do.check:pk-soup-identifier leak lexid)
               args (map check (pk-identifier-list args lexid)))
-        (pk-compile-leaf-from-thunk
+        (pk-parse-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
           ; We make sure the expression is attached to the
           ; hyperenvironment it captures.
@@ -493,17 +490,17 @@
 
 
 (pk-dynenv-set-meta pk-replenv* 'tm
-  (pk-wrap-op:pk-mc-compiler-for idfn))
+  (pk-wrap-op:pk-mc-parser-for idfn))
 
 (pk-dynenv-set-meta pk-replenv* 'tm*
-  (pk-wrap-op:pk-mc-rest-compiler-for idfn))
+  (pk-wrap-op:pk-mc-rest-parser-for idfn))
 
 (pk-dynenv-set-meta pk-replenv* 'hm
-  (pk-wrap-op:pk-mc-compiler-for
+  (pk-wrap-op:pk-mc-parser-for
     [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
 
 (pk-dynenv-set-meta pk-replenv* 'hm*
-  (pk-wrap-op:pk-mc-rest-compiler-for
+  (pk-wrap-op:pk-mc-rest-parser-for
     [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
 
 (pk-dynenv-set pk-replenv* 'wrap-op pk-wrap-op)

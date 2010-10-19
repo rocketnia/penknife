@@ -61,7 +61,7 @@
 
 
 ; TODO: Consider removing the following "arc.prn.q[...]" lines when
-; the Penknife compilation phase isn't so ridiculously slow. (This
+; the Penknife parsing phase isn't so ridiculously slow. (This
 ; probably has to do with the use of rulebooks.)
 
 

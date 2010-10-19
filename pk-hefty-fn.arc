@@ -31,8 +31,8 @@
 ; This is a plugin for Penknife. To use it, load it just after you
 ; load penknife.arc and pk-thin-fn.arc.
 ;
-; This installs some lambda forms, 'hf and 'hf*, which compile to a
-; new Penknife expression type, 'pk-lambdacalc-hefty-fn. When an
+; This installs some lambda forms, 'hf and 'hf*, which parse to a new
+; Penknife expression type, 'pk-lambdacalc-hefty-fn. When an
 ; expression of this type is evaluated, it's compiled into an Arc
 ; closure as though it's a 'pk-lambdacalc-thin-fn expression, but then
 ; it's packed up into a 'pk-hefty-fn value which contains the Arc
@@ -50,8 +50,8 @@
 ; (pk-captures-hyperenv self)                 ; external rule
 ; < some external rules using 'def-pk-optimize-subexpr >
 ;
-; (pk-hefty-fn-rest-compiler compiled-op body lexid static-hyperenv)
-; (pk-hefty-fn-compiler compiled-op body lexid static-hyperenv)
+; (pk-hefty-fn-rest-parser op-fork body lexid static-hyperenv)
+; (pk-hefty-fn-parser op-fork body lexid static-hyperenv)
 ;
 ; Penknife  [hf [args$&] body&]            ; syntax
 ; Penknife  [hf* [args$&] restarg$ body&]  ; syntax
@@ -64,26 +64,26 @@
 ;
 ; pk-hefty-fn
 ;   rep: A table which supports the following fields:
-;   rep._!compiled:  A Penknife function representing the behavior
-;                    that should happen when this object is called
-;                    using 'pk-call. It's bound to be more efficient
-;                    than evaluating the body directly.
-;   rep._!expr:      The 'pk-lambdacalc-hefty-fn expression which
-;                    returned this object.
-;   rep._!hyperenv:  The dynamic hyperenvironment that existed when
-;                    the 'pk-lambdacalc-hefty-fn expression was
-;                    evaluated to return this object.
+;   rep._!optimized:  A Penknife function representing the behavior
+;                     that should happen when this object is called
+;                     using 'pk-call. It's bound to be more efficient
+;                     than evaluating the body directly.
+;   rep._!expr:       The 'pk-lambdacalc-hefty-fn expression which
+;                     returned this object.
+;   rep._!hyperenv:   The dynamic hyperenvironment that existed when
+;                     the 'pk-lambdacalc-hefty-fn expression was
+;                     evaluated to return this object.
 
 
 (rc:ontype pk-call args pk-hefty-fn pk-hefty-fn
-  (apply pk-call rep.self!compiled args))
+  (apply pk-call rep.self!optimized args))
 
 
 (def-pk-eval pk-lambdacalc-hefty-fn
   (annotate 'pk-hefty-fn
-    (obj compiled  (pk-eval self lexid dyn-hyperenv)
-         expr      tagged-self
-         hyperenv  dyn-hyperenv)))
+    (obj optimized  (pk-eval self lexid dyn-hyperenv)
+         expr       tagged-self
+         hyperenv   dyn-hyperenv)))
 
 (rc:ontype pk-captures-hyperenv ()
              pk-lambdacalc-hefty-fn pk-lambdacalc-hefty-fn
@@ -91,27 +91,26 @@
 
 (def-pk-optimize-subexpr pk-lambdacalc-hefty-fn
   `(annotate 'pk-hefty-fn
-     (obj compiled  ,(pk-optimize-subexpr
-                       self lexid dyn-hyperenv local-lex env-lex)
-          expr      (',thunk.tagged-self)
-          hyperenv  _)))
+     (obj optimized  ,(pk-optimize-subexpr
+                        self lexid dyn-hyperenv local-lex env-lex)
+          expr       (',thunk.tagged-self)
+          hyperenv   _)))
 
 
-(def pk-hefty-fn-rest-compiler
-       (compiled-op body lexid static-hyperenv)
-  (pk-compile-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+(def pk-hefty-fn-rest-parser (op-fork body lexid static-hyperenv)
+  (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
     (thunk:pk-attach:annotate 'pk-lambdacalc-hefty-fn
-      (pk-detach:pk-fork-to-get:pk-thin-fn-rest-compiler
-        compiled-op body lexid static-hyperenv))))
+      (pk-detach:pk-fork-to-get:pk-thin-fn-rest-parser
+        op-fork body lexid static-hyperenv))))
 
-(def pk-hefty-fn-compiler (compiled-op body lexid static-hyperenv)
-  (pk-compile-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+(def pk-hefty-fn-parser (op-fork body lexid static-hyperenv)
+  (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
     (thunk:pk-attach:annotate 'pk-lambdacalc-hefty-fn
-      (pk-detach:pk-fork-to-get:pk-thin-fn-compiler
-        compiled-op body lexid static-hyperenv))))
+      (pk-detach:pk-fork-to-get:pk-thin-fn-parser
+        op-fork body lexid static-hyperenv))))
 
 
-(pk-dynenv-set-meta pk-replenv* 'hf pk-wrap-op.pk-hefty-fn-compiler)
+(pk-dynenv-set-meta pk-replenv* 'hf pk-wrap-op.pk-hefty-fn-parser)
 
 (pk-dynenv-set-meta pk-replenv* 'hf*
-  pk-wrap-op.pk-hefty-fn-rest-compiler)
+  pk-wrap-op.pk-hefty-fn-rest-parser)
