@@ -81,6 +81,7 @@
 ;
 ; (pk-hyperenv-lexids hyperenv)
 ;
+; (pk-captured-lexid original)
 ; (pk-wrapmc dyn-hyperenv arity varargs func)
 ; < some external rules using 'def-pk-eval >
 ; (pk-captures-hyperenv self)                          ; external rule
@@ -372,6 +373,10 @@
   (keys rep.hyperenv))
 
 
+(ut:w/niceuniq captured
+  (def pk-captured-lexid (original)
+    (sym:string captured '- original)))
+
 (def pk-wrapmc (dyn-hyperenv arity varargs func)
   (fn (op-fork body lexid static-hyperenv)
     (with (args (n-of arity
@@ -395,7 +400,7 @@
                   (list lexid global-static-hyperenv _)]
                 _]
            args)
-      (withs (generated-lexids (map [list _ (list:uniq)]
+      (withs (generated-lexids (map [do `(,_ (,pk-captured-lexid._))]
                                     pk-hyperenv-lexids.dyn-hyperenv)
               generated-hyperenv
                 (pk-hyperenv-overlap pk-hyperenv-globals.dyn-hyperenv
