@@ -57,7 +57,7 @@
 ; [let var$ val body&]
 
 
-[= [meta .] [wrap-op:hm qq leak [result] result]]
+[= [meta .] [hm qq leak [result] result]]
 
 
 ; TODO: Consider removing the following "arc.prn.q[...]" lines when
@@ -66,15 +66,13 @@
 
 
 arc.prn.q[Defining macql*.]
-[= macql*'meta [wrap-op:hm* our-qq ignored-leak
-                            [name qq leak args rest] body
-                 our-qq.[= meta.\,name [wrap-op:hm* \,qq \,leak
-                                                    \,args \,rest
+[= macql*'meta [hm* our-qq ignored-leak [name qq leak args rest] body
+                 our-qq.[= meta.\,name [hm* \,qq \,leak \,args \,rest
                                          \,body]]]]
 
 arc.prn.q[Defining macql.]
 [macql* macql our-qq our-leak [name qq leak args] body
-  our-qq.[= meta.\,name [wrap-op:hm \,qq \,leak \,args \,body]]]
+  our-qq.[= meta.\,name [hm \,qq \,leak \,args \,body]]]
 
 arc.prn.q[Defining mac*.]
 [macql* mac* qq leak [name args rest] body

@@ -72,17 +72,18 @@
 ; (pk-attach-sip-using self acc-hyperenv)    ; rulebook
 ;
 ; (pk-words-hype-staticenv lexid globalenv soup)
-; (pk-splice-into-qq self)                        ; rulebook
+; (pk-splice-into-qq self)                            ; rulebook
 ; (pk-eval-qq context-lexid basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
-; (pk-captures-hyperenv self)                     ; external rule
+; (pk-captures-hyperenv self)                         ; external rule
 ; < some external rules using 'def-pk-optimize-subexpr >
 ; (pk-qq-parser op-fork body lexid static-hyperenv)
 ;
 ; (pk-hyperenv-lexids hyperenv)
 ;
-; (pk-captured-lexid original)
+; (pk-captures-of self)                                ; external rule
 ; (pk-wrapmc dyn-hyperenv arity varargs func)
+; (pk-wrapmc-op dyn-hyperenv arity varargs func)
 ; < some external rules using 'def-pk-eval >
 ; (pk-captures-hyperenv self)                          ; external rule
 ; < some external rules using 'def-pk-optimize-subexpr >
@@ -101,7 +102,7 @@
 ;
 ; pk-attached-soup
 ;   rep: A list which supports the following fields:
-;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.0:  A lexid (lexical ID).
 ;   rep._.1:  A hyperenvironment containing global static environments
 ;             to use when compiling this soup.
 ;   rep._.2:  A 'pk-soup value.
@@ -153,26 +154,17 @@
 ;             'pk-attached-soup values' hyperenvironments. Any
 ;             conflict between lexid mappings is a runtime error.
 ;
-; TODO: Change the following field descriptions when the "change the
-; quasiquotation operators" TODO is dealt with. (In fact, the first
-; field will probably be deleted.)
 ; pk-lambdacalc-mc
 ;   rep: A list which supports the following fields:
-;   rep._.0:  The lexid (lexical ID) of the environments this macro
-;             definition will single out from the dynamic
-;             hyperenvironments it's evaluated in, in order for the
-;             resulting macros to have some environment to use for the
-;             main basis of their quasiquote operators' generated
-;             code.
-;   rep._.1:  The number of non-rest arguments to the macro op parser.
+;   rep._.0:  The number of non-rest arguments to the macro op parser.
 ;             This is the minimum number of words that can appear in
 ;             the body of any form using the macro op.
-;   rep._.2:  A boolean indicating, if true, that this is a varargs
+;   rep._.1:  A boolean indicating, if true, that this is a varargs
 ;             macro operator, which is to say that any part of the
 ;             form body that isn't parsed into words for the regular
 ;             arguments will be given as the final argument of the
 ;             wrapped function.
-;   rep._.3:  An expression of one of the 'pk-lambdacalc-[something]
+;   rep._.2:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a function to be wrapped up as
 ;             a macro op. The first argument to the function will be
 ;             a 'pk-qq-basis value corresponding to the
@@ -186,6 +178,12 @@
 ;             op, the final argument of the function will be another
 ;             'pk-attached-soup value corresponding to the soup that
 ;             remains after those words have been parsed out.
+;
+; pk-mc-info
+;   rep: A list which supports the following fields:
+;   rep._.0:  A 'pk-captures value holding the local environments that
+;             were captured from the dynamic hyperenvironment as this
+;             macro was created.
 
 
 ; TODO: See if a macro's qq operator should check not only what lexid
@@ -197,7 +195,7 @@
 ; doesn't actually copy the syntax information for qq. Well, since the
 ; 'pk-qq-basis value contains the captured hyperenvironment anyway, is
 ; there really a point in restricting access to it?
-;
+
 ; TODO: Add a compilation phase after parsing in order to support
 ; things like [let foo 1 [mac bar [] qq.foo]] in modules. Macros will
 ; still need to be expanded during the parsing phase, but their
@@ -207,6 +205,18 @@
 ; there'll need to be an intermediate syntax in the parse tree for
 ; resolving variables in a command using a macro's hyperenvironment
 ; before that command has started to evaluate.
+;
+; TODO: The previous TODO is partially underway, using a bit of a
+; different approach: Making lexids contain enough information to
+; specify how to get to a hyperenvironment from a base environment.
+; The lexids have been restructured, and macros now wear their
+; captured environments publically enough for them to support being
+; swapped out with doppelgangers in each module instance. To finish
+; this off, we need to make sure we can stop carrying environments
+; around where they don't belong, like (to not-yet-sure degrees)
+; 'pk-sip-hype-staticenv, 'pk-attached-soup, and
+; 'pk-attached-lambdacalc. Then we'll need to finish up modules and
+; make sure these modifications actually work.
 
 
 ; TODO: Figure out what the point of attached soup is if unattached
@@ -373,11 +383,20 @@
   (keys rep.hyperenv))
 
 
-(ut:w/niceuniq captured
-  (def pk-captured-lexid (original)
-    (sym:string captured '- original)))
+(rc:ontype pk-captures-of () pk-mc-info pk-mc-info
+  rep.self.0)
 
 (def pk-wrapmc (dyn-hyperenv arity varargs func)
+  (pk-meta result
+             (annotate 'pk-mc-info
+               (list:annotate 'pk-captures
+                 (listtab:map [list _ (pk-hyperenv-get-safe-local
+                                        dyn-hyperenv _)]
+                              pk-hyperenv-lexids.dyn-hyperenv)))
+           var-forker  (list:pk-var-forker-from-op:pk-wrapmc-op
+                          arity varargs func)))
+
+(def pk-wrapmc-op (arity varargs func)
   (fn (op-fork body lexid static-hyperenv)
     (with (args (n-of arity
                   (iflet (margin word rest) o-split-first-token.body
@@ -400,10 +419,17 @@
                   (list lexid global-static-hyperenv _)]
                 _]
            args)
-      (withs (generated-lexids (map [do `(,_ (,pk-captured-lexid._))]
-                                    pk-hyperenv-lexids.dyn-hyperenv)
+      (withs (; TODO: Make a 'pk-fork-to-name method or something so
+              ; that we don't have to scrape expressions like this.
+              hyped-name (rep:get.1:rep pk-fork-to-get.op-fork)
+              dyn-hyperenv
+                (pk-captured-hyperenv:pk-dyn-hyperenv-get
+                  static-hyperenv hyped-name)
+              generated-lexids
+                (map [list _ (list:cons rep.hyped-name _)]
+                     pk-hyperenv-lexids.dyn-hyperenv)
               generated-hyperenv
-                (pk-hyperenv-overlap pk-hyperenv-globals.dyn-hyperenv
+                (pk-hyperenv-overlap dyn-hyperenv
                   (apply pk-make-hyperenv
                     (mappend [list _.1.0
                                    (pk-hyperenv-get dyn-hyperenv _.0)]
@@ -430,15 +456,15 @@
 
 (def-pk-eval pk-lambdacalc-mc
   (pk-wrapmc
-    dyn-hyperenv self.1 self.2 (pk-eval self.3 lexid dyn-hyperenv)))
+    dyn-hyperenv self.0 self.1 (pk-eval self.2 lexid dyn-hyperenv)))
 
 (rc:ontype pk-captures-hyperenv () pk-lambdacalc-mc pk-lambdacalc-mc
   t)
 
 (def-pk-optimize-subexpr pk-lambdacalc-mc
-  `(pk-wrapmc _ ,self.1 ,self.2
+  `(pk-wrapmc _ ,self.0 ,self.1
      ,(pk-optimize-subexpr
-        self.3 lexid dyn-hyperenv local-lex env-lex)))
+        self.2 lexid dyn-hyperenv local-lex env-lex)))
 
 (= pk-qqmeta* pk-wrap-op.pk-qq-parser)
 
@@ -461,7 +487,7 @@
           ; hyperenvironment it captures.
           (thunk:pk-attach-to pk-hyperenv-globals.static-hyperenv
             (annotate 'pk-lambdacalc-mc
-              (list lexid len.args t
+              (list len.args t
                 (pk-detach:do.build-fn:pk-finish-fn
                   (join (list qq leak) args list.rest) nil body lexid
                   (pk-hyperenv-shadow-assoclist static-hyperenv
@@ -486,7 +512,7 @@
           ; hyperenvironment it captures.
           (thunk:pk-attach-to pk-hyperenv-globals.static-hyperenv
             (annotate 'pk-lambdacalc-mc
-              (list lexid len.args nil
+              (list len.args nil
                 (pk-detach:do.build-fn:pk-finish-fn
                   (join (list qq leak) args) nil body lexid
                   (pk-hyperenv-shadow-assoclist static-hyperenv
@@ -508,4 +534,5 @@
   (pk-wrap-op:pk-mc-rest-parser-for
     [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
 
+; TODO: Stop exposing this.
 (pk-dynenv-set pk-replenv* 'wrap-op pk-wrap-op)

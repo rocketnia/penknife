@@ -140,16 +140,20 @@
 ; (pk-dynenv-set self varname)                 ; rulebook
 ; (pk-dynenv-set-meta self varname)            ; rulebook
 ;
-; (pk-hyped-sym-lexid hyped-sym)
 ; (pk-hyped-sym-name hyped-sym)
+; (pk-hyped-sym-lexid hyped-sym)
 ; (rc.oiso2 a b)                  ; external rule
 ;
+; (pk-captures-of self)                                     ; rulebook
+; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
 ; (pk-hyperenv-get hyperenv lexid)
+; (pk-hyperenv-get-safe-local hyperenv lexid)
 ; (pk-hyperenv-get-global hyperenv lexid)
+; (pk-hyperenv-get-safe-both hyperenv lexid)
 ; (pk-hyperenv-get-both hyperenv lexid)
 ; (pk-hyperenv-combine a b)
-; (pk-hyperenv-shove place hyperenv-part error)                ; macro
+; (pk-hyperenv-shove place hyperenv-part error)             ; macro
 ; (pk-hyperenv-overlap a b)
 ; (pk-hyperenv-globals hyperenv)
 ; (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
@@ -198,15 +202,14 @@
 ; (pk-eval self lexid dyn-hyperenv)       ; rulebook
 ; (pk-eval-meta self lexid dyn-hyperenv)  ; rulebook
 ;
-; pk-repllexid*  ; symbol to be used as a lexid (lexical ID)
-; pk-replenv*    ; value of type 'pk-interactive-env
+; pk-replenv*  ; value of type 'pk-interactive-env
 ;
 ; (error-message error)
 ; (pktl act-on report-error nextmeta)
-; (pktl-stream lexid env str act-on report-error prompt)
+; (pktl-stream env str act-on report-error prompt)
 ; (pkrepl (o str missing))
-; (pkdo lexid env str)
-; (pkload lexid env filename)
+; (pkdo env str)
+; (pkload env filename)
 ; (pkparse str)
 ;
 ;
@@ -350,6 +353,11 @@
 ;        error out when trying to display an environment which has an
 ;        element that refers back to the same environment.
 ;
+; pk-captures
+;   rep: A table mapping lexids ("lexical IDs," which identify
+;        independent sections of textual code) to singleton lists
+;        containing environments that have been captured.
+;
 ; pk-hyperenv
 ;   rep: A table mapping lexids ("lexical IDs," which identify
 ;        independent sections of textual code) to two-element proper
@@ -359,15 +367,15 @@
 ;                   environment.
 ;
 ; pk-hyped-sym
-;   rep: A list which supports the following fields, which together
-;        indicate a specific variable in a specific environment in a
-;        hyperenvironment:
-;   rep._.0:  A symbol to be used as a lexid (lexical ID).
-;   rep._.1:  A symbol to be used as a variable name.
+;   rep: A cons cell which supports the following fields, which
+;        together indicate a specific variable in a specific
+;        environment in a hyperenvironment:
+;   (car rep._):  A symbol to be used as a variable name.
+;   (cdr rep._):  A lexid (lexical ID).
 ;
 ; pk-sip-hype-staticenv
 ;   rep: A list which supports the following fields:
-;   rep._.0:  A symbol to be used as a lexid (lexical ID).
+;   rep._.0:  A lexid (lexical ID).
 ;   rep._.1:  An environment to use as the global environment
 ;             associated with that lexid in the global dynamic
 ;             hyperenvironment when evaluating the expression
@@ -414,6 +422,39 @@
 ;                      the value to raise as an error message whenever
 ;                      the result, but not this metadata, is looked up
 ;                      in a binding or environment.
+;
+; lexid
+;   This isn't a tagged type; it's meant to be used as a table key,
+;   and table keys have rather sketchy support on Rainbow and Jarc, so
+;   we're not bothering to risk anything more complicated than cons
+;   cells and symbols.
+;   
+;   A lexid (lexical ID) represents a way to determine a global
+;   environment using some environment as a basis. Lexids are used in
+;   order to distinguish one body of code, such as the REPL input,
+;   from another, such as the output of a macro. Variable names are
+;   kept together with their lexids as 'pk-hyped-sym values in order
+;   to accomplish hygiene.
+;   
+;   One thing lexids don't distinguish is a local scope from its
+;   surrounding scope. That's because variables should indeed shadow
+;   each other in this case. For this reason, a lexid only tells you
+;   how to get to a global environment; the local environment will be
+;   kept track of by a hyperenvironment (a mapping from lexids to
+;   local and global environments).
+;   
+;   The format of a lexid is is either nil, to indicate that the
+;   hyperenvironment's basis environment itself should be used, or a
+;   cons tree of the form ((var-name . var-lexid) . parent-lexid),
+;   signifying that the 'var-name and 'var-lexid should be wrapped up
+;   as a 'pk-hyped-sym value and looked up in the hyperenvironment in
+;   order to get a "capturer" value yielding (via
+;   'pk-captured-hyperenv) a new hyperenvironment to resolve
+;   'parent-lexid by. Local environments trump this process (which is
+;   to say, while looking up the whole lexid, 'var-lexid, and
+;   'parent-lexid). If you need a more formal description of this
+;   process, you should take a look at the implementation of
+;   'pk-hyperenv-get.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -877,30 +918,70 @@
     (pk-dynenv-ensure-binding self varname) new-value))
 
 
-(def pk-hyped-sym-lexid (hyped-sym)
-  rep.hyped-sym.0)
-
 (def pk-hyped-sym-name (hyped-sym)
-  rep.hyped-sym.1)
+  (car rep.hyped-sym))
+
+(def pk-hyped-sym-lexid (hyped-sym)
+  (cdr rep.hyped-sym))
 
 ; This is used internally by rc.opos.
 (rc:ontypes rc.oiso2 (a b) (pk-hyped-sym pk-hyped-sym) pk-hyped-sym
   (iso rep.a rep.b))
 
 
+; TODO: This currently breaks on Jarc. Jarc preserves symbol keys, but
+; it translates most keys into java.lang.String values. Fortunately,
+; indexing using non-symbol lexids works just fine for us, but we
+; can't get a hyperenvironment's lexid keys using keys:rep. We should
+; change hyperenvironments so that the lexid is repeated in the value
+; of the list, so that we can use [map car vals._] or something to get
+; the lexids.
+
+(rc:ontype pk-captures-of () rc.any rc.any
+  (err:+ "There's no existing 'pk-captures-of rule for "
+         (tostring write.self)))
+
+(def pk-captured-hyperenv (capturer)
+  (apply pk-make-hyperenv
+    (ut:mappendlet (lexid (globalenv)) (tablist:rep pk-captures-of.capturer)
+      (list lexid globalenv))))
+
 (def pk-make-hyperenv args
   (annotate 'pk-hyperenv
     (apply copy (table)
       (mappend [list _.0 (list _.1 _.1)] pair.args))))
 
+; TODO: Make sure this is only used intentionally. It used to just get
+; the local environment.
 (def pk-hyperenv-get (hyperenv lexid)
-  (car:pk-hyperenv-get-both hyperenv lexid))
+  (aif (pk-hyperenv-get-safe-local hyperenv lexid)
+    car.it
+    ; NOTE: Rainbow doesn't treat a&b.c properly.
+    ; NOTE: Jarc doesn't like (let ((a . b) . c) d ...).
+    (iflet (var . parent) (acons&idfn lexid)
+      (let (var-name . var-lexid) var
+        ; NOTE: All of these calls can raise errors.
+        (ut:lets it (pk-hyperenv-get hyperenv var-lexid)
+                 it (pk-dynenv-get it var-name)
+                    (aif (pk-hyperenv-get-safe-local
+                           pk-captured-hyperenv.it parent)
+                      car.it
+                      (pk-hyperenv-get hyperenv it))))
+      (err:+ "A hyperenvironment didn't have a mapping for the base "
+             "lexid."))))
+
+(def pk-hyperenv-get-safe-local (hyperenv lexid)
+  (awhen (pk-hyperenv-get-safe-both hyperenv lexid)
+    (list car.it)))
 
 (def pk-hyperenv-get-global (hyperenv lexid)
   (cadr:pk-hyperenv-get-both hyperenv lexid))
 
+(def pk-hyperenv-get-safe-both (hyperenv lexid)
+  rep.hyperenv.lexid)
+
 (def pk-hyperenv-get-both (hyperenv lexid)
-  (or rep.hyperenv.lexid
+  (or (pk-hyperenv-get-safe-both hyperenv lexid)
       (err:+ "A hyperenvironment was indexed with an unsupported "
              "lexid: " (tostring write.hyperenv) " with "
              (tostring write.lexid))))
@@ -933,25 +1014,25 @@
         (do.acc:list lexid (list global-env global-env))))))
 
 (def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
-  (let (lexid varname) rep.hyped-varname
+  (let (varname . lexid) rep.hyped-varname
     (pk-dynenv-ensure-binding
       (pk-hyperenv-get hyperenv lexid) varname)))
 
 (def pk-dyn-hyperenv-get (hyperenv hyped-varname)
-  (let (lexid varname) rep.hyped-varname
+  (let (varname . lexid) rep.hyped-varname
     (pk-dynenv-get (pk-hyperenv-get hyperenv lexid) varname)))
 
 (def pk-dyn-hyperenv-get-meta (hyperenv hyped-varname)
-  (let (lexid varname) rep.hyped-varname
+  (let (varname . lexid) rep.hyped-varname
     (pk-dynenv-get-meta (pk-hyperenv-get hyperenv lexid) varname)))
 
 (def pk-dyn-hyperenv-set (hyperenv hyped-varname new-value)
-  (let (lexid varname) rep.hyped-varname
+  (let (varname . lexid) rep.hyped-varname
     (pk-dynenv-set
       (pk-hyperenv-get hyperenv lexid) varname new-value)))
 
 (def pk-dyn-hyperenv-set-meta (hyperenv hyped-varname new-value)
-  (let (lexid varname) rep.hyped-varname
+  (let (varname . lexid) rep.hyped-varname
     (pk-dynenv-set-meta
       (pk-hyperenv-get hyperenv lexid) varname new-value)))
 
@@ -1075,7 +1156,7 @@
 (def pk-string-identifier-with-env (string lexid env)
   (when (or (all pk-alpha-id-char string)
             (all pk-infix-id-char string))
-    (list (annotate 'pk-hyped-sym (list lexid sym.string)) env)))
+    (list (annotate 'pk-hyped-sym (cons sym.string lexid)) env)))
 
 ; This assumes the first argument is a 'pk-soup value.
 (def pk-soup-identifier-with-env (soup lexid env)
@@ -1294,7 +1375,6 @@
 ; TODO: Figure out how global environments are going to work when
 ; loading from files.
 
-(= pk-repllexid* 'pk-repllexid*)
 (= pk-replenv* (pk-make-interactive-env))
 
 
@@ -1328,7 +1408,7 @@
       (whenlet (quit) rep.meta!quit
         list.quit))))
 
-(def pktl-stream (lexid env str act-on report-error prompt)
+(def pktl-stream (env str act-on report-error prompt)
   (zap newline-normalizer str)
   ; NOTE: If 'pk-staticenv-read-parse-tl raises an error while
   ; reading, rather than while parsing, this could loop infinitely. We
@@ -1336,12 +1416,12 @@
   ; predict, such as multiple-word commands or commands with
   ; mismatched brackets, so there isn't an obvious way to separate the
   ; reading phase from the parsing phase.
-  (let hyperenv (pk-make-hyperenv lexid env)
+  (let hyperenv (pk-make-hyperenv nil env)
     (pktl act-on report-error
       (fn ()
         do.prompt.str     ; Wait for more input.
-        (whenlet (expr) (pk-staticenv-read-parse-tl env lexid str)
-          (list:pk-eval-meta expr lexid hyperenv))))))
+        (whenlet (expr) (pk-staticenv-read-parse-tl env nil str)
+          (list:pk-eval-meta expr nil hyperenv))))))
 
 ; NOTE: Rainbow's profiler doesn't like function calls in optional
 ; arguments.
@@ -1349,7 +1429,7 @@
   (def pkrepl ((o str missing))
     (when (is str missing)
       (= str (ut.xstdin)))
-    (pktl-stream pk-repllexid* pk-replenv* str
+    (pktl-stream pk-replenv* str
       [let val pk-demeta._
         (on-err [prn "Error writing: " error-message._]
           (fn () write.val (prn)))]
@@ -1362,13 +1442,13 @@
                   throw.t))
         (pr "pk> ")])))
 
-(def pkdo (lexid env str)
+(def pkdo (env str)
   ; Display no results, raise all errors, and show no prompts.
   ; NOTE: Rainbow doesn't like [].
-  (pktl-stream lexid env str [do] err [do]))
+  (pktl-stream env str [do] err [do]))
 
-(def pkload (lexid env filename)
-  (w/infile str filename (pkdo lexid env str)))
+(def pkload (env filename)
+  (w/infile str filename (pkdo env str)))
 
 ; This is just a convenience for parsing things at the REPL.
 (def pkparse (str)

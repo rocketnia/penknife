@@ -127,7 +127,7 @@
   (ut:ret new-hyperenv pk-copy-hyperenv.hyperenv
     (let binds-sobjs (table)
       (each (hyped-sym meta) binds
-        (let (lexid name) rep.hyped-sym
+        (let (name . lexid) rep.hyped-sym
           (or= rep.new-hyperenv.lexid
                  (let env (pk-make-interactive-env) (list env env)))
           (= (.name:or= do.binds-sobjs.lexid (table)) list.meta)))
@@ -191,8 +191,9 @@
                    (is char #\-)
                  (pr "--")
                  (pr "-u" (coerce int.char 'string 16) "-")))))
-    (sym:+ "pk--" (do.mangle-sym rep.hyped-sym.0) "-s-"
-           (do.mangle-sym rep.hyped-sym.1))))
+    (sym:+ "pk--" (treewise (fn (a b)
+                              (sym:string "-s-" a "-i-" b "-e-"))
+                    mangle-sym rep.hyped-sym))))
 
 
 (rc:ontype pk-captures-hyperenv ()
