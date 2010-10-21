@@ -450,11 +450,11 @@
 ;   as a 'pk-hyped-sym value and looked up in the hyperenvironment in
 ;   order to get a "capturer" value yielding (via
 ;   'pk-captured-hyperenv) a new hyperenvironment to resolve
-;   'parent-lexid by. Local environments trump this process (which is
-;   to say, while looking up the whole lexid, 'var-lexid, and
-;   'parent-lexid). If you need a more formal description of this
-;   process, you should take a look at the implementation of
-;   'pk-hyperenv-get.
+;   'parent-lexid by. Local environments trump this process at every
+;   step (which is to say, while looking up the whole lexid,
+;   'var-lexid, and 'parent-lexid). If you need a more formal
+;   description of this process, you should take a look at the
+;   implementation of 'pk-hyperenv-get.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
