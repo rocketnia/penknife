@@ -128,7 +128,7 @@
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-make-interactive-env)
-; (pk-staticenv-get-var-forker staticenv hyped-varname globalenv)
+; (pk-staticenv-get-var-forker staticenv hyped-varname)
 ; (pk-staticenv-default-op-parser self)        ; rulebook
 ; pk-comment-char*                             ; value of type 'char
 ; (pk-staticenv-read-parse-tl self lexid str)  ; rulebook
@@ -148,6 +148,7 @@
 ; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
 ; (pk-hyperenv-get hyperenv lexid)
+; (pk-hyperenv-get-local hyperenv lexid)
 ; (pk-hyperenv-get-safe-local hyperenv lexid)
 ; (pk-hyperenv-get-global hyperenv lexid)
 ; (pk-hyperenv-get-safe-both hyperenv lexid)
@@ -161,16 +162,6 @@
 ; (pk-dyn-hyperenv-get-meta hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-set hyperenv hyped-varname new-value)
 ; (pk-dyn-hyperenv-set-meta hyperenv hyped-varname new-value)
-;
-; pk-attach-param*                ; value satisfying dy!aparam
-; (fn-pk-noattach body)
-; (pk-noattach . body)            ; macro
-; (fn-pk-attach body (o built-up-hyperenv missing))
-; (pk-attach . body)              ; macro
-; (pk-attach-to hyperenv . body)  ; macro
-; (fn-pk-detach body)
-; (pk-detach . body)              ; macro
-; (pk-detachmap seq)
 ;
 ; (pk-parse-leaf-from-thunk staticenv getter)
 ; (pk-parse-literal-from-thunk value-parser staticenv)
@@ -317,15 +308,15 @@
 ; pk-parse-fork
 ;   rep: A table which supports the following fields:
 ;   rep._!get:   A value which, when called using 'pk-call, accepts no
-;                arguments and returns a 'pk-attached-lambdacalc
+;                arguments and returns a 'pk-lambdacalc-[something]
 ;                value, representing an expression that returns a
 ;                value to be used in a parent expression.
 ;   rep._!set:   A value which, when called using 'pk-call, accepts
-;                one 'pk-attached-lambdacalc value and returns another
-;                that sets something to the value returned by the
-;                first expression.
+;                one 'pk-lambdacalc-[something] value and returns
+;                another that sets something to the value returned by
+;                the first expression.
 ;   rep._!meta:  A value which, when called using 'pk-call, accepts no
-;                arguments and returns a 'pk-attached-lambdacalc
+;                arguments and returns a 'pk-lambdacalc-[something]
 ;                value, representing an expression that returns a
 ;                value to be used by a top-level command interpreter.
 ;   rep._!op:    A value which, when called using 'pk-call or
@@ -382,13 +373,6 @@
 ;             resulting from this syntax.
 ;   rep._.2:  A 'pk-soup word to be compiled using that lexid.
 ;
-; pk-attached-lambdacalc
-;   rep: A list which supports the following fields:
-;   rep._.0:  A hyperenvironment containing global environments to use
-;             when evaluating this expression.
-;   rep._.1:  An expression of one of the 'pk-lambdacalc-[something]
-;             types.
-;
 ; pk-fn-meta
 ;   rep: A singleton proper list containing a Penknife function which
 ;        returns a value of type 'pk-ad-hoc-meta. The inner function
@@ -413,11 +397,10 @@
 ;                      return the contained value to the Arc REPL.
 ;   rep._!var-forker:  If present, a singleton proper list containing
 ;                      a Penknife function which, when given a
-;                      'pk-hyped-sym variable name and a global static
-;                      environment, will return a 'pk-parse-fork
-;                      value. If instead this is nil, then a default
-;                      parse fork should be constructed according to
-;                      that environment's own behavior.
+;                      'pk-hyped-sym variable name, will return a
+;                      'pk-parse-fork value. If instead this is nil,
+;                      then a default parse fork should be constructed
+;                      according to that environment's own behavior.
 ;   rep._!error:       If present, a singleton proper list containing
 ;                      the value to raise as an error message whenever
 ;                      the result, but not this metadata, is looked up
@@ -858,14 +841,13 @@
 (def pk-make-interactive-env ()
   (let rep (table) (annotate 'pk-interactive-env thunk.rep)))
 
-(def pk-staticenv-get-var-forker (staticenv hyped-varname globalenv)
+(def pk-staticenv-get-var-forker (staticenv hyped-varname)
   (aif (aand (pk-dynenv-get-binding
                staticenv pk-hyped-sym-name.hyped-varname)
              (!var-forker:rep:pk-binding-get-meta car.it))
-    (pk-call car.it hyped-varname globalenv)
+    (pk-call car.it hyped-varname)
     (let op-parser pk-staticenv-default-op-parser.staticenv
-      (pk-call pk-var-forker-from-op.op-parser
-        hyped-varname globalenv))))
+      (pk-call pk-var-forker-from-op.op-parser hyped-varname))))
 
 (rc:ontype pk-staticenv-default-op-parser ()
              pk-interactive-env pk-interactive-env
@@ -939,11 +921,12 @@
 
 (rc:ontype pk-captures-of () rc.any rc.any
   (err:+ "There's no existing 'pk-captures-of rule for "
-         (tostring write.self)))
+         (tostring write.self) "."))
 
 (def pk-captured-hyperenv (capturer)
   (apply pk-make-hyperenv
-    (ut:mappendlet (lexid (globalenv)) (tablist:rep pk-captures-of.capturer)
+    (ut:mappendlet (lexid (globalenv)) (tablist:rep
+                                         pk-captures-of.capturer)
       (list lexid globalenv))))
 
 (def pk-make-hyperenv args
@@ -969,6 +952,9 @@
                       (pk-hyperenv-get hyperenv it))))
       (err:+ "A hyperenvironment didn't have a mapping for the base "
              "lexid."))))
+
+(def pk-hyperenv-get-local (hyperenv lexid)
+  (car:pk-hyperenv-get-both hyperenv lexid))
 
 (def pk-hyperenv-get-safe-local (hyperenv lexid)
   (awhen (pk-hyperenv-get-safe-both hyperenv lexid)
@@ -1010,8 +996,8 @@
 (def pk-hyperenv-globals (hyperenv)
   (annotate 'pk-hyperenv
     (listtab:accum acc
-      (each (lexid (local-env global-env)) rep.hyperenv
-        (do.acc:list lexid (list global-env global-env))))))
+      (each (lexid (localenv globalenv)) rep.hyperenv
+        (do.acc:list lexid (list globalenv globalenv))))))
 
 (def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
   (let (varname . lexid) rep.hyped-varname
@@ -1037,57 +1023,6 @@
       (pk-hyperenv-get hyperenv lexid) varname new-value)))
 
 
-(= pk-attach-param* dy.make-param.nil)
-
-(def fn-pk-noattach (body)
-  (dy:param-let pk-attach-param* nil
-    call.body))
-
-(mac pk-noattach body
-  `(fn-pk-noattach:fn () ,@body))
-
-; NOTE: Rainbow's profiler doesn't like function calls in optional
-; arguments.
-(w/uniq missing
-  (def fn-pk-attach (body (o built-up-hyperenv missing))
-    (when (is built-up-hyperenv missing)
-      (= built-up-hyperenv (pk-make-hyperenv)))
-    (dy:param-let pk-attach-param*
-                    [pk-hyperenv-shove built-up-hyperenv _
-                      (+ "A 'pk-detach block resulted in a "
-                         "hyperenvironment part that conflicted with "
-                         "others in the same 'pk-attach block.")]
-      (let unattached-lambdacalc call.body
-        (annotate 'pk-attached-lambdacalc
-          (list built-up-hyperenv unattached-lambdacalc))))))
-
-(mac pk-attach body
-  `(fn-pk-attach:fn () ,@body))
-
-(mac pk-attach-to (hyperenv . body)
-  `(fn-pk-attach (fn () ,@body) ,hyperenv))
-
-(def fn-pk-detach (body)
-  (unless dy.param-get.pk-attach-param*
-    (err:+ "A 'pk-detach block was entered outside the context of a "
-           "matching 'pk-attach."))
-  (let attached-lambdacalc (pk-noattach call.body)
-    (case type.attached-lambdacalc pk-attached-lambdacalc nil
-      (err:+ "The inside of a 'pk-detach block didn't result in a "
-             "'pk-attached-lambdacalc value."))
-    (let (hyperenv-part expr) rep.attached-lambdacalc
-      (.hyperenv-part:or dy.param-get.pk-attach-param*
-        (err:+ "A 'pk-detach block was exited outside the context of "
-               "a matching 'pk-attach."))
-      expr)))
-
-(mac pk-detach body
-  `(fn-pk-detach:fn () ,@body))
-
-(mac pk-detachmap (seq)
-  `(map [pk-detach _] (pk-noattach ,seq)))
-
-
 (def pk-parse-leaf-from-thunk (staticenv getter)
   (zap memo getter)
   (annotate 'pk-parse-fork
@@ -1099,40 +1034,31 @@
 
 (def pk-parse-literal-from-thunk (value-parser staticenv)
   (pk-parse-leaf-from-thunk staticenv
-    (thunk:pk-attach:annotate 'pk-lambdacalc-literal
-      (list:pk-noattach call.value-parser))))
+    (thunk:annotate 'pk-lambdacalc-literal (list call.value-parser))))
 
 ; The 'op-and-body-parser parameter should be a function that returns
-; a proper list of 'pk-attached-lambdacalc values representing the
+; a proper list of 'pk-lambdacalc-[something] values representing the
 ; function and arguments.
 (def pk-parse-call-from-thunk (op-and-body-parser op-parser)
   (zap memo op-and-body-parser)
   (annotate 'pk-parse-fork
-    (obj get   (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call
-                 (pk-detachmap call.op-and-body-parser))
+    (obj get   (memo:thunk:annotate 'pk-lambdacalc-call
+                 call.op-and-body-parser)
          set   (let set-parser
-                      (memo:thunk:pk-attach:annotate
-                        'pk-lambdacalc-call-set
-                        (pk-detachmap call.op-and-body-parser))
-                 [pk-attach:annotate 'pk-lambdacalc-call
-                   (pk-detachmap:list call.set-parser _)])
-         meta  (memo:thunk:pk-attach:annotate 'pk-lambdacalc-call-meta
-                 (pk-detachmap call.op-and-body-parser))
+                      (memo:thunk:annotate 'pk-lambdacalc-call-set
+                        call.op-and-body-parser)
+                 [annotate 'pk-lambdacalc-call
+                   (list call.set-parser _)])
+         meta  (memo:thunk:annotate 'pk-lambdacalc-call-meta
+                 call.op-and-body-parser)
          op    op-parser)))
 
 (def pk-var-forker-from-op (op-parser)
-  (fn (hyped-varname globalenv)
-    (let hyperenv (pk-make-hyperenv
-                    pk-hyped-sym-lexid.hyped-varname globalenv)
-      (annotate 'pk-parse-fork
-        (obj get   (memo:thunk:pk-attach-to hyperenv
-                     (annotate 'pk-lambdacalc-var hyped-varname))
-             set   [pk-attach-to hyperenv
-                     (annotate 'pk-lambdacalc-set
-                       (list hyped-varname pk-detach._))]
-             meta  (memo:thunk:pk-attach-to hyperenv
-                     (annotate 'pk-lambdacalc-var-meta hyped-varname))
-             op    op-parser)))))
+  [annotate 'pk-parse-fork
+    (obj get   (memo:thunk:annotate 'pk-lambdacalc-var _)
+         set   (fn (new) (annotate 'pk-lambdacalc-set (list _ new)))
+         meta  (memo:thunk:annotate 'pk-lambdacalc-var-meta _)
+         op    op-parser)])
 
 
 (def pk-function-call-parser (op-fork body lexid static-hyperenv)
@@ -1200,18 +1126,16 @@
 (mr:rule pk-parse (soup lexid static-hyperenv) identifier
   (iflet (hyped-sym env) (pk-soup-identifier-with-env soup lexid
                            (pk-hyperenv-get static-hyperenv lexid))
-    (let (local-env global-env) (pk-hyperenv-get-both
-                                  (if env
-                                    (pk-hyperenv-overlap
-                                      (pk-make-hyperenv lexid env)
-                                      static-hyperenv)
-                                    static-hyperenv)
-                                  lexid)
+    (let localenv (pk-hyperenv-get-local
+                    (if env
+                      (pk-hyperenv-overlap
+                        (pk-make-hyperenv lexid env) static-hyperenv)
+                      static-hyperenv)
+                    lexid)
       (let name pk-hyped-sym-name.hyped-sym
-        (iflet (literal) (pk-staticenv-literal local-env name)
-          (pk-parse-literal-from-thunk thunk.literal local-env)
-          (pk-staticenv-get-var-forker
-            local-env hyped-sym global-env))))
+        (iflet (literal) (pk-staticenv-literal localenv name)
+          (pk-parse-literal-from-thunk thunk.literal localenv)
+          (pk-staticenv-get-var-forker localenv hyped-sym))))
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-parse (soup lexid static-hyperenv) infix
@@ -1360,9 +1284,6 @@
 
 (def-pk-eval pk-lambdacalc-demeta
   (pk-eval-meta car.self lexid dyn-hyperenv))
-
-(def-pk-eval-meta pk-attached-lambdacalc
-  (pk-eval-meta self.1 lexid self.0))
 
 (def-pk-eval-meta pk-parse-fork
   (pk-eval-meta pk-fork-to-meta.tagged-self lexid dyn-hyperenv))

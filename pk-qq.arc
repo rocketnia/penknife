@@ -214,9 +214,8 @@
 ; swapped out with doppelgangers in each module instance. To finish
 ; this off, we need to make sure we can stop carrying environments
 ; around where they don't belong, like (to not-yet-sure degrees)
-; 'pk-sip-hype-staticenv, 'pk-attached-soup, and
-; 'pk-attached-lambdacalc. Then we'll need to finish up modules and
-; make sure these modifications actually work.
+; 'pk-sip-hype-staticenv and 'pk-attached-soup. Then we'll need to
+; finish up modules and make sure these modifications actually work.
 
 
 ; TODO: Figure out what the point of attached soup is if unattached
@@ -352,9 +351,8 @@
                                    (o-ltrim rest ~soup-whitec)
                               (do.acc
                                 `(splice
-                                   ,(pk-detach:pk-fork-to-get
-                                      (pk-parse
-                                        word lexid static-hyperenv))))
+                                   ,(pk-fork-to-get:pk-parse
+                                      word lexid static-hyperenv)))
                               (= soup rest))
                          (case type.esccode pk-sip-brackets
                            (let words (otokens rep.esccode.0)
@@ -363,9 +361,10 @@
                                       "form didn't have exactly one "
                                       "word in it."))
                              (do.acc `(splice
-                                        ,(pk-detach:pk-fork-to-get
-                                           (pk-parse car.words lexid
-                                             static-hyperenv))))
+                                        ,(pk-fork-to-get:pk-parse
+                                           car.words
+                                           lexid
+                                           static-hyperenv)))
                              (= soup rest))
                            (err:+ "An unrecognized quasiquote escape "
                                   "code was encountered.")))
@@ -374,9 +373,8 @@
                    (do (do.acc `(bracket ,@(self rep.trigger.0)))
                        (= soup rest)))))))
     (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
-      (thunk:pk-attach:annotate 'pk-lambdacalc-qq
-        (list (pk-detach pk-fork-to-get.op-fork)
-              do.parse-into-dsl.body)))))
+      (thunk:annotate 'pk-lambdacalc-qq
+        (list pk-fork-to-get.op-fork do.parse-into-dsl.body)))))
 
 
 (def pk-hyperenv-lexids (hyperenv)
@@ -421,7 +419,7 @@
            args)
       (withs (; TODO: Make a 'pk-fork-to-name method or something so
               ; that we don't have to scrape expressions like this.
-              hyped-name (rep:get.1:rep pk-fork-to-get.op-fork)
+              hyped-name (rep pk-fork-to-get.op-fork)
               dyn-hyperenv
                 (pk-captured-hyperenv:pk-dyn-hyperenv-get
                   static-hyperenv hyped-name)
@@ -483,17 +481,14 @@
               rest (do.check:pk-soup-identifier rest lexid))
         (pk-parse-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
-          ; We make sure the expression is attached to the
-          ; hyperenvironment it captures.
-          (thunk:pk-attach-to pk-hyperenv-globals.static-hyperenv
-            (annotate 'pk-lambdacalc-mc
-              (list len.args t
-                (pk-detach:do.build-fn:pk-finish-fn
-                  (join (list qq leak) args list.rest) nil body lexid
-                  (pk-hyperenv-shadow-assoclist static-hyperenv
-                    (join (map [list _ pk-qqmeta*] (list qq leak))
-                          (map [list _ pk-nometa*]
-                               (join args list.rest)))))))))))))
+          (thunk:annotate 'pk-lambdacalc-mc
+            (list len.args t
+              (do.build-fn:pk-finish-fn
+                (join (list qq leak) args list.rest) nil body lexid
+                (pk-hyperenv-shadow-assoclist static-hyperenv
+                  (join (map [list _ pk-qqmeta*] (list qq leak))
+                        (map [list _ pk-nometa*]
+                             (join args list.rest))))))))))))
 
 (def pk-mc-parser-for (build-fn)
   (fn (op-fork body lexid static-hyperenv)
@@ -508,16 +503,13 @@
               args (map check (pk-identifier-list args lexid)))
         (pk-parse-leaf-from-thunk
           (pk-hyperenv-get static-hyperenv lexid)
-          ; We make sure the expression is attached to the
-          ; hyperenvironment it captures.
-          (thunk:pk-attach-to pk-hyperenv-globals.static-hyperenv
-            (annotate 'pk-lambdacalc-mc
-              (list len.args nil
-                (pk-detach:do.build-fn:pk-finish-fn
-                  (join (list qq leak) args) nil body lexid
-                  (pk-hyperenv-shadow-assoclist static-hyperenv
-                    (join (map [list _ pk-qqmeta*] (list qq leak))
-                          (map [list _ pk-nometa*] args))))))))))))
+          (thunk:annotate 'pk-lambdacalc-mc
+            (list len.args nil
+              (do.build-fn:pk-finish-fn
+                (join (list qq leak) args) nil body lexid
+                (pk-hyperenv-shadow-assoclist static-hyperenv
+                  (join (map [list _ pk-qqmeta*] (list qq leak))
+                        (map [list _ pk-nometa*] args)))))))))))
 
 
 (pk-dynenv-set-meta pk-replenv* 'tm
@@ -527,12 +519,11 @@
   (pk-wrap-op:pk-mc-rest-parser-for idfn))
 
 (pk-dynenv-set-meta pk-replenv* 'hm
-  (pk-wrap-op:pk-mc-parser-for
-    [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
+  (pk-wrap-op:pk-mc-parser-for [annotate 'pk-lambdacalc-hefty-fn _]))
 
 (pk-dynenv-set-meta pk-replenv* 'hm*
   (pk-wrap-op:pk-mc-rest-parser-for
-    [pk-attach:annotate 'pk-lambdacalc-hefty-fn pk-detach._]))
+    [annotate 'pk-lambdacalc-hefty-fn _]))
 
 ; TODO: Stop exposing this.
 (pk-dynenv-set pk-replenv* 'wrap-op pk-wrap-op)

@@ -170,7 +170,7 @@
 
 (def pk-drop-to-arc-parser (op-fork body lexid static-hyperenv)
   (pk-parse-call-from-thunk
-    (thunk:list:pk-attach:pk-noattach:annotate 'pk-lambdacalc-literal
+    (thunk:list:annotate 'pk-lambdacalc-literal
       (list:eval:read:+ "(fn () " soup->string-force.body ")"))
     (pk-staticenv-default-op-parser:pk-hyperenv-get
       static-hyperenv lexid)))
@@ -182,7 +182,7 @@
 
 (def pk-drop-to-plt-parser (op-fork body lexid static-hyperenv)
   (pk-parse-call-from-thunk
-    (thunk:list:pk-attach:pk-noattach:annotate 'pk-lambdacalc-literal
+    (thunk:list:annotate 'pk-lambdacalc-literal
       (list:if plt
         (plt.eval:plt.read:instring:+
           "(lambda () " soup->string-force.body ")")
@@ -198,7 +198,7 @@
 
 (def pk-eval-plt-parser (op-fork body lexid static-hyperenv)
   (pk-parse-call-from-thunk
-    (thunk:list:pk-attach:pk-noattach:annotate 'pk-lambdacalc-literal
+    (thunk:list:annotate 'pk-lambdacalc-literal
       (list:if plt
         (let exprs (readall soup->string-force.body)
           (thunk:ut:ret result nil
@@ -225,7 +225,7 @@
 ; considering that Penknife treats them as comment characters.
 (def pk-js-parser (op-fork body lexid static-hyperenv)
   (pk-parse-call-from-thunk
-    (thunk:list:pk-attach:pk-noattach:annotate 'pk-lambdacalc-literal
+    (thunk:list:annotate 'pk-lambdacalc-literal
       (list:if pk-jvm-js-engine*
         (thunk:jvm!eval pk-jvm-js-engine* soup->string-force.body)
         (thunk:err:+ "Evaluating JavaScript isn't supported on this "
@@ -347,22 +347,16 @@
     (unless single.arg
       (err "A meta body didn't have exactly one word in it."))
     (zap car arg)
-    (with (getter (memo:thunk:pk-attach:annotate 'pk-lambdacalc-demeta
-                    (list:pk-detach:pk-fork-to-meta:pk-parse
+    (with (getter (memo:thunk:annotate 'pk-lambdacalc-demeta
+                    (list:pk-fork-to-meta:pk-parse
                       arg lexid static-hyperenv))
-           info (memo:thunk:iflet (hyped-sym env)
-                            (pk-soup-identifier-with-env arg lexid
-                              (pk-hyperenv-get-global
-                                static-hyperenv lexid))
-                  (list hyped-sym (pk-make-hyperenv
-                                    pk-hyped-sym-lexid.hyped-sym env))
-                  (err "The meta of a non-identifier can't be set.")))
+           name-parser (memo:thunk:or (pk-soup-identifier arg lexid)
+                         (err:+ "The meta of a non-identifier can't "
+                                "be set.")))
       (annotate 'pk-parse-fork
         (obj get   getter
-             set   [let (hyped-varname hyperenv) call.info
-                     (pk-attach-to hyperenv
-                       (annotate 'pk-lambdacalc-set-meta
-                         (list hyped-varname pk-detach._)))]
+             set   [annotate 'pk-lambdacalc-set-meta
+                     (list call.name-parser _)]
              meta  getter
              op    (pk-staticenv-default-op-parser:pk-hyperenv-get
                      static-hyperenv lexid))))))

@@ -396,8 +396,8 @@
 
 
 (def pk-finish-fn (args rest body lexid static-hyperenv)
-  (pk-attach:annotate 'pk-lambdacalc-thin-fn
-    (list args rest (map [pk-detach:pk-fork-to-get:pk-parse
+  (annotate 'pk-lambdacalc-thin-fn
+    (list args rest (map [pk-fork-to-get:pk-parse
                            _ lexid static-hyperenv]
                          body))))
 

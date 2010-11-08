@@ -75,20 +75,16 @@
           result (pktl act-on report-error
                    (fn ()
                      do.prompt.str  ; Wait for more input.
-                     (whenlet (attached) (pk-staticenv-read-parse-tl
-                                           env lexid str)
-                       (withs (attached-hyperenv rep.attached.0
-                               without (pk-hyperenv-without
-                                         attached-hyperenv lexid)
-                               command
-                                 (eval
-                                   `[let _ (pk-hyperenv-overlap
-                                             (',thunk.without)
-                                             (pk-make-hyperenv
-                                               (',thunk.lexid) _))
-                                      ,(pk-optimize-subexpr-meta
-                                         rep.attached.1 lexid
-                                         attached-hyperenv nil nil)]))
+                     (whenlet (expr) (pk-staticenv-read-parse-tl
+                                       env lexid str)
+                       (let command
+                             (eval
+                               `[let _ (pk-make-hyperenv
+                                         (',thunk.lexid) _)
+                                  ,(pk-optimize-subexpr-meta
+                                     expr lexid
+                                     (pk-make-hyperenv lexid env)
+                                     nil nil)])
                          (push command rev-commands)
                          (list do.command.env)))))
           commands rev.rev-commands
