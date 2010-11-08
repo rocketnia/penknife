@@ -148,7 +148,6 @@
 ; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
 ; (pk-hyperenv-get hyperenv lexid)
-; (pk-hyperenv-get-local hyperenv lexid)
 ; (pk-hyperenv-get-safe-local hyperenv lexid)
 ; (pk-hyperenv-get-global hyperenv lexid)
 ; (pk-hyperenv-get-safe-both hyperenv lexid)
@@ -366,11 +365,7 @@
 ; pk-sip-hype-staticenv
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A lexid (lexical ID).
-;   rep._.1:  An environment to use as the global environment
-;             associated with that lexid in the global dynamic
-;             hyperenvironment when evaluating the expression
-;             resulting from this syntax.
-;   rep._.2:  A 'pk-soup word to be compiled using that lexid.
+;   rep._.1:  A 'pk-soup word to be compiled using that lexid.
 ;
 ; pk-fn-meta
 ;   rep: A singleton proper list containing a Penknife function which
@@ -952,9 +947,6 @@
       (err:+ "A hyperenvironment didn't have a mapping for the base "
              "lexid."))))
 
-(def pk-hyperenv-get-local (hyperenv lexid)
-  (car:pk-hyperenv-get-both hyperenv lexid))
-
 (def pk-hyperenv-get-safe-local (hyperenv lexid)
   (awhen (pk-hyperenv-get-safe-both hyperenv lexid)
     (list car.it)))
@@ -1090,7 +1082,7 @@
       (~or (oi.olen> soup 1) oi.oempty.soup)
     (let sip (oref soup 0)
       (case type.sip pk-sip-hype-staticenv
-        (let (inner-lexid globalenv inner-soup) rep.sip
+        (let (inner-lexid inner-soup) rep.sip
           (pk-soup-identifier inner-soup inner-lexid))))))
 
 (def pk-identifier-list (soup lexid)
@@ -1102,7 +1094,7 @@
     (err "An identifier list wasn't exactly one sip: " soup))
   (zap [oref _ 0] soup)
   (case type.soup pk-sip-hype-staticenv
-    (let (inner-lexid globalenv inner-soup) rep.soup
+    (let (inner-lexid inner-soup) rep.soup
       (pk-identifier-list inner-soup inner-lexid))
     (do (case type.soup pk-sip-brackets nil
           (err "An identifier list wasn't a 'pk-sip-brackets."))
@@ -1118,11 +1110,11 @@
 
 (mr:rule pk-parse (soup lexid static-hyperenv) identifier
   (iflet hyped-sym (pk-soup-identifier soup lexid)
-    (let localenv (pk-hyperenv-get-local static-hyperenv lexid)
+    (let staticenv (pk-hyperenv-get static-hyperenv lexid)
       (iflet (literal) (pk-staticenv-literal
-                         localenv pk-hyped-sym-name.hyped-sym)
-        (pk-parse-literal-from-thunk thunk.literal localenv)
-        (pk-staticenv-get-var-forker localenv hyped-sym)))
+                         staticenv pk-hyped-sym-name.hyped-sym)
+        (pk-parse-literal-from-thunk thunk.literal staticenv)
+        (pk-staticenv-get-var-forker staticenv hyped-sym)))
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-parse (soup lexid static-hyperenv) infix
@@ -1161,14 +1153,12 @@
 
 (rc:ontype pk-parse-sip (lexid static-hyperenv)
              pk-sip-hype-staticenv pk-sip-hype-staticenv
-  (withs ((inner-lexid globalenv soup) rep.self
+  (withs ((inner-lexid soup) rep.self
           tokens otokens.soup)
     (unless single.tokens
       (do.fail:+ "The syntax was a 'pk-sip-hype-staticenv without "
                  "exactly one word in it."))
-    (let global-hyperenv (pk-make-hyperenv inner-lexid globalenv)
-      (pk-parse car.tokens inner-lexid
-        (pk-hyperenv-overlap global-hyperenv static-hyperenv)))))
+    (pk-parse car.tokens inner-lexid static-hyperenv)))
 
 
 (= pk-defuse-param* (dy.make-param [err:case type._ pk-native-err

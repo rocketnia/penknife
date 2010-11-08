@@ -154,7 +154,7 @@
 
 (rc:ontype sip->string-force ()
              pk-sip-hype-staticenv pk-sip-hype-staticenv
-  (soup->string-force rep.self.2))
+  (soup->string-force rep.self.1))
 
 (rc:ontype sip->string-force () pk-sip-whitec pk-sip-whitec
   " ")

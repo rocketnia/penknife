@@ -45,19 +45,17 @@
 ; Instead of generating a brand new lexid and capturing a brand new
 ; closure of the dynamic hyperenvironment at each quasiquote usage, we
 ; generate a new quasiquote form each time a macro is called, so that
-; so that the same variables can be used in multiple pieces of
-; generated code that are stitched together. This quasiquotation
-; operator uses brand new lexids whose associated global static
-; environments are the local dynamic environments that existed at the
-; time the macro was defined, and it picks one of those lexids
-; depending on the lexid it's used from (i.e. usually inside the
-; macro definition).
+; the same variables can be used in multiple pieces of generated code
+; that are stitched together. This quasiquotation operator uses lexids
+; whose associated global static environments are the local dynamic
+; environments that existed at the time the macro was defined, and it
+; picks one of those lexids depending on the lexid it's used from
+; (i.e. usually inside the macro definition).
 ;
 ; The qq operator is therefore a parameter of every macro, and for
 ; its implementation, it's backed by a 'pk-qq-basis value which
-; contains the lexid mapping and a global static hyperenvironment.
-; (Modifying the value of this variable can indeed change the behavior
-; of the quasiquotation.)
+; contains the lexid mapping. (Modifying the value of this variable
+; can indeed change the behavior of the quasiquotation.)
 ;
 ; Each macro also takes a second, "leak" quasiquotation operator as a
 ; parameter, and that one invades the lexid and hyperenvironment
@@ -66,12 +64,7 @@
 
 ; Declaration listing:
 ;
-; (pk-attach-unattached-soup soup lexid env conflict-error)
-; (pk-attach-soup-using soup acc-hyperenv)
-; (pk-attach-slurp-using self acc-hyperenv)  ; rulebook
-; (pk-attach-sip-using self acc-hyperenv)    ; rulebook
-;
-; (pk-words-hype-staticenv lexid globalenv soup)
+; (pk-words-hype-staticenv lexid soup)
 ; (pk-splice-into-qq self)                            ; rulebook
 ; (pk-eval-qq context-lexid basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
@@ -102,36 +95,28 @@
 ;
 ; pk-attached-soup
 ;   rep: A list which supports the following fields:
-;   rep._.0:  A lexid (lexical ID).
-;   rep._.1:  A hyperenvironment containing global static environments
-;             to use when compiling this soup.
-;   rep._.2:  A 'pk-soup value.
+;   rep._.0:  A lexid (lexical ID) to use when compiling this soup.
+;   rep._.1:  A 'pk-soup value.
 ;
 ; pk-qq-basis
-;   rep: A list which supports the following fields:
-;   rep._.0:  A table mapping lexids (lexical IDs) of the macro usage
-;             context to singleton lists containing lexids that should
-;             be used instead. (Most quasiquote uses will use the
-;             non-leak basis provided by a macro call, and the
-;             replacement lexids in that case will correspond to local
-;             environments captured at the time the macro was created.
-;             The leak operator's mapping will be empty.) If a mapping
-;             doesn't exist for a lexid, it means the same thing as a
-;             mapping from that lexid to a singleton list containing
-;             the same lexid. That is to say, if there's no
-;             replacement, no replacement is made.
-;   rep._.1:  A hyperenvironment containing global static environments
-;             to use when compiling the soup resulting from a
-;             quasiquote form that uses this basis.
+;   rep: A table mapping lexids (lexical IDs) of the macro usage
+;        context to singleton lists containing lexids that should be
+;        used instead. (Most quasiquote uses will use the non-leak
+;        basis provided by a macro call, and the replacement lexids in
+;        that case will correspond to local environments captured at
+;        the time the macro was created. The leak operator's mapping
+;        will be empty.) If a mapping doesn't exist for a lexid, it
+;        means the same thing as a mapping from that lexid to a
+;        singleton list containing the same lexid. That is to say, if
+;        there's no replacement, no replacement is made.
 ;
 ; pk-lambdacalc-qq
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a 'pk-qq-basis value to use as
 ;             the basis of this quasiquote form. The basis will
-;             provide the lexid and the hyperenvironment to include in
-;             the new 'pk-attached-soup value resulting from this
-;             quasiquote form.
+;             provide the lexid to use in the new 'pk-attached-soup
+;             value resulting from this quasiquote form.
 ;   rep._.1:  A list in a special quasiquote DSL. Each element is of
 ;             one of the following formats:
 ;
@@ -141,18 +126,15 @@
 ;                                'pk-sip-brackets value, and splice it
 ;                                in as a sip.
 ;               (splice _)
-;                 - Splice in the 'pk-attached-soup value resulting
-;                   from the 'pk-lambdacalc-[something] expression _.
-;                   This will involve converting each word of its soup
-;                   into a word containing only a
+;                 - Splice in the 'pk-attached-soup or 'pk-soup value
+;                   resulting from the 'pk-lambdacalc-[something]
+;                   expression _. This will involve converting each
+;                   word of its soup into a word containing only a
 ;                   'pk-sip-hype-staticenv and keeping track of the
-;                   attached hyperenvironment.
+;                   attached lexid.
 ;
 ;             The soup resulting from this DSL will be wrapped up in
-;             a new 'pk-attached-soup based on the basis, but adding
-;             to that hyperenvironment any lexids mapped by spliced-in
-;             'pk-attached-soup values' hyperenvironments. Any
-;             conflict between lexid mappings is a runtime error.
+;             a new 'pk-attached-soup based on the basis.
 ;
 ; pk-lambdacalc-mc
 ;   rep: A list which supports the following fields:
@@ -166,9 +148,9 @@
 ;             wrapped function.
 ;   rep._.2:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a function to be wrapped up as
-;             a macro op. The first argument to the function will be
-;             a 'pk-qq-basis value corresponding to the
-;             hyperenvironment and lexid captured as this
+;             a macro op. The first argument to the function will be a
+;             'pk-qq-basis value mapping lexids into other lexids that
+;             refer to the hyperenvironment captured as this
 ;             'pk-lambdacalc-mc expression evaluates. The second
 ;             argument will be another 'pk-qq-basis value
 ;             corresponding to the place the macro is used. Further
@@ -193,8 +175,8 @@
 ; then [qqfoo], then [mac baz [] qqfoo.foo] to intentionally give a
 ; macro access to a nonlocal scope, except that [meta= qqfoo qq]
 ; doesn't actually copy the syntax information for qq. Well, since the
-; 'pk-qq-basis value contains the captured hyperenvironment anyway, is
-; there really a point in restricting access to it?
+; macro's dynamic value contains the captured hyperenvironment anyway,
+; is there there really a point in restricting access to it?
 
 ; TODO: Add a compilation phase after parsing in order to support
 ; things like [let foo 1 [mac bar [] qq.foo]] in modules. Macros will
@@ -209,69 +191,28 @@
 ; TODO: The previous TODO is partially underway, using a bit of a
 ; different approach: Making lexids contain enough information to
 ; specify how to get to a hyperenvironment from a base environment.
-; The lexids have been restructured, and macros now wear their
-; captured environments publically enough for them to support being
-; swapped out with doppelgangers in each module instance. To finish
-; this off, we need to make sure we can stop carrying environments
-; around where they don't belong, like (to not-yet-sure degrees)
-; 'pk-sip-hype-staticenv and 'pk-attached-soup. Then we'll need to
-; finish up modules and make sure these modifications actually work.
+; The lexids have been restructured, macros now wear their captured
+; environments publicly enough for them to support being swapped out
+; with doppelgangers in each module instance, and we've stopped
+; carrying environments around where they don't belong, like
+; 'pk-sip-hype-staticenv, 'pk-attached-soup, and 'pk-qq-basis. Now we
+; just need to finish up modules and make sure these modifications
+; actually work.
 
 
-; TODO: Figure out what the point of attached soup is if unattached
-; soup contains the same information.
-
-(def pk-attach-unattached-soup (soup lexid env conflict-error)
-  (let hyperenv (pk-make-hyperenv lexid env)
-    (pk-attach-soup-using soup
-      [pk-hyperenv-shove hyperenv _ conflict-error])
-    (annotate 'pk-attached-soup (list lexid hyperenv soup))))
-
-(def pk-attach-soup-using (soup acc-hyperenv)
-  (each slurp rep.soup
-    (pk-attach-slurp-using slurp acc-hyperenv)))
-
-(rc:ontype pk-attach-slurp-using (acc-hyperenv) string string
-  nil)
-
-(rc:ontype pk-attach-slurp-using (acc-hyperenv) rc.list list
-  (each sip self
-    (pk-attach-sip-using sip acc-hyperenv)))
-
-(rc:ontype pk-attach-sip-using (acc-hyperenv)
-             pk-sip-brackets pk-sip-brackets
-  (pk-attach-soup-using rep.self.0 acc-hyperenv))
-
-(rc:ontype pk-attach-sip-using (acc-hyperenv)
-             pk-sip-compose pk-sip-compose
-  (each op rep.self.0
-    (pk-attach-soup-using op acc-hyperenv))
-  (pk-attach-soup-using rep.self.1 acc-hyperenv))
-
-(rc:ontype pk-attach-sip-using (acc-hyperenv)
-             pk-sip-hype-staticenv pk-sip-hype-staticenv
-  (do.acc-hyperenv:pk-make-hyperenv rep.self.0 rep.self.1)
-  (pk-attach-soup-using rep.self.2 acc-hyperenv))
-
-(rc:ontype pk-attach-sip-using (acc-hyperenv)
-             pk-sip-whitec pk-sip-whitec
-  nil)
-
-
-(def pk-words-hype-staticenv (lexid globalenv soup)
+(def pk-words-hype-staticenv (lexid soup)
   (apply o+ pk-empty-soup*
     (accum acc
       (ut:dstwhilet (margin token rest) o-split-first-token.soup
         do.acc.margin
         (do.acc:pk-soup-singleton:annotate 'pk-sip-hype-staticenv
-          (list lexid globalenv token))
+          (list lexid token))
         (= soup rest))
       do.acc.soup)))
 
 (rc:ontype pk-splice-into-qq () pk-attached-soup pk-attached-soup
-  (let (lexid hyperenv soup) rep.self
-    (pk-words-hype-staticenv
-      lexid (pk-hyperenv-get-global hyperenv lexid) soup)))
+  (let (lexid soup) rep.self
+    (pk-words-hype-staticenv lexid soup)))
 
 (rc:ontype pk-splice-into-qq () pk-soup pk-soup
   self)
@@ -295,11 +236,9 @@
                                    "'pk-lambdacalc-qq operator was "
                                    "encountered."))))))
     (let basis-lexid
-           (aif rep.basis.0.context-lexid car.it context-lexid)
-      (pk-attach-unattached-soup do.soup-dsl.dsl basis-lexid
-        (pk-hyperenv-get rep.basis.1 basis-lexid)
-        (+ "Two global static hyperenvironments spliced into a "
-           "quasiquote form conflicted.")))))
+           (aif rep.basis.context-lexid car.it context-lexid)
+      (annotate 'pk-attached-soup
+        (list basis-lexid do.soup-dsl.dsl)))))
 
 (def-pk-eval pk-lambdacalc-qq
   (pk-eval-qq lexid (pk-eval self.0 lexid dyn-hyperenv) self.1
@@ -396,13 +335,12 @@
 
 (def pk-wrapmc-op (arity varargs func)
   (fn (op-fork body lexid static-hyperenv)
-    (with (args (n-of arity
-                  (iflet (margin word rest) o-split-first-token.body
-                    (do (= body rest)
-                        word)
-                    (err:+ "A macro was used without enough words in "
-                           "the form body.")))
-           global-static-hyperenv pk-hyperenv-globals.static-hyperenv)
+    (let args (n-of arity
+                (iflet (margin word rest) o-split-first-token.body
+                  (do (= body rest)
+                      word)
+                  (err:+ "A macro was used without enough words in "
+                         "the form body.")))
       (if varargs
         (zap [join _ list.body] args)
         (when o-split-first-token.body
@@ -413,10 +351,7 @@
       ; useful behavior, there should eventually be enough soup
       ; manipulation power within Penknife to implement a replacement
       ; macro-building form there.
-      (zap [map [annotate 'pk-attached-soup
-                  (list lexid global-static-hyperenv _)]
-                _]
-           args)
+      (zap [map [annotate 'pk-attached-soup (list lexid _)] _] args)
       (withs (; TODO: Make a 'pk-fork-to-name method or something so
               ; that we don't have to scrape expressions like this.
               hyped-name (rep pk-fork-to-get.op-fork)
@@ -426,31 +361,20 @@
               generated-lexids
                 (map [list _ (list:cons rep.hyped-name _)]
                      pk-hyperenv-lexids.dyn-hyperenv)
-              generated-hyperenv
-                (pk-hyperenv-overlap dyn-hyperenv
-                  (apply pk-make-hyperenv
-                    (mappend [list _.1.0
-                                   (pk-hyperenv-get dyn-hyperenv _.0)]
-                             generated-lexids)))
               func-result
                 (apply pk-call func
-                  (annotate 'pk-qq-basis                    ; qq
-                    (list listtab.generated-lexids
-                          generated-hyperenv))
-                  (annotate 'pk-qq-basis                    ; leak
-                    (list (table) global-static-hyperenv))
+                  (annotate 'pk-qq-basis listtab.generated-lexids)
+                    ; qq
+                  (annotate 'pk-qq-basis (table))  ; leak
                   args))
         (case type.func-result pk-attached-soup nil
           (err "The result of a macro wasn't a 'pk-attached-soup."))
-        (let (result-lexid result-hyperenv result-soup)
-               rep.func-result
+        (let (result-lexid result-soup) rep.func-result
           (zap otokens result-soup)
           (unless single.result-soup
             (err:+ "The result of a macro didn't contain exactly one "
                    "word."))
-          (pk-parse car.result-soup result-lexid
-            (pk-hyperenv-overlap
-              result-hyperenv static-hyperenv)))))))
+          (pk-parse car.result-soup result-lexid static-hyperenv))))))
 
 (def-pk-eval pk-lambdacalc-mc
   (pk-wrapmc
