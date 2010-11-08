@@ -64,7 +64,7 @@
 
 ; Declaration listing:
 ;
-; (pk-words-hype-staticenv lexid soup)
+; (pk-hype-words lexid soup)
 ; (pk-splice-into-qq self)                            ; rulebook
 ; (pk-eval-qq context-lexid basis dsl handle-splice)
 ; < some external rules using 'def-pk-eval >
@@ -93,7 +93,7 @@
 ;
 ; Type listing:
 ;
-; pk-attached-soup
+; pk-hyped-soup
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A lexid (lexical ID) to use when compiling this soup.
 ;   rep._.1:  A 'pk-soup value.
@@ -115,8 +115,8 @@
 ;   rep._.0:  An expression of one of the 'pk-lambdacalc-[something]
 ;             types, which will return a 'pk-qq-basis value to use as
 ;             the basis of this quasiquote form. The basis will
-;             provide the lexid to use in the new 'pk-attached-soup
-;             value resulting from this quasiquote form.
+;             provide the lexid to use in the new 'pk-hyped-soup value
+;             resulting from this quasiquote form.
 ;   rep._.1:  A list in a special quasiquote DSL. Each element is of
 ;             one of the following formats:
 ;
@@ -126,15 +126,15 @@
 ;                                'pk-sip-brackets value, and splice it
 ;                                in as a sip.
 ;               (splice _)
-;                 - Splice in the 'pk-attached-soup or 'pk-soup value
+;                 - Splice in the 'pk-hyped-soup or 'pk-soup value
 ;                   resulting from the 'pk-lambdacalc-[something]
-;                   expression _. This will involve converting each
-;                   word of its soup into a word containing only a
-;                   'pk-sip-hype-staticenv and keeping track of the
-;                   attached lexid.
+;                   expression _. In the case of 'pk-hyped-soup, this
+;                   will involve converting each word of its soup into
+;                   a word containing only a 'pk-sip-hype and keeping
+;                   track of the attached lexid.
 ;
 ;             The soup resulting from this DSL will be wrapped up in
-;             a new 'pk-attached-soup based on the basis.
+;             a new 'pk-hyped-soup based on the basis.
 ;
 ; pk-lambdacalc-mc
 ;   rep: A list which supports the following fields:
@@ -156,9 +156,9 @@
 ;             corresponding to the place the macro is used. Further
 ;             arguments to the function will be words parsed out of
 ;             the body of the form the macro op is used in, wrapped up
-;             as 'pk-attached-soup values. If this is a varargs macro
-;             op, the final argument of the function will be another
-;             'pk-attached-soup value corresponding to the soup that
+;             as 'pk-hyped-soup values. If this is a varargs macro op,
+;             the final argument of the function will be another
+;             'pk-hyped-soup value corresponding to the soup that
 ;             remains after those words have been parsed out.
 ;
 ; pk-mc-info
@@ -195,24 +195,23 @@
 ; environments publicly enough for them to support being swapped out
 ; with doppelgangers in each module instance, and we've stopped
 ; carrying environments around where they don't belong, like
-; 'pk-sip-hype-staticenv, 'pk-attached-soup, and 'pk-qq-basis. Now we
-; just need to finish up modules and make sure these modifications
-; actually work.
+; 'pk-sip-hype, 'pk-hyped-soup, and 'pk-qq-basis. Now we just need to
+; finish up modules and make sure these modifications actually work.
 
 
-(def pk-words-hype-staticenv (lexid soup)
+(def pk-hype-words (lexid soup)
   (apply o+ pk-empty-soup*
     (accum acc
       (ut:dstwhilet (margin token rest) o-split-first-token.soup
         do.acc.margin
-        (do.acc:pk-soup-singleton:annotate 'pk-sip-hype-staticenv
+        (do.acc:pk-soup-singleton:annotate 'pk-sip-hype
           (list lexid token))
         (= soup rest))
       do.acc.soup)))
 
-(rc:ontype pk-splice-into-qq () pk-attached-soup pk-attached-soup
+(rc:ontype pk-splice-into-qq () pk-hyped-soup pk-hyped-soup
   (let (lexid soup) rep.self
-    (pk-words-hype-staticenv lexid soup)))
+    (pk-hype-words lexid soup)))
 
 (rc:ontype pk-splice-into-qq () pk-soup pk-soup
   self)
@@ -237,8 +236,7 @@
                                    "encountered."))))))
     (let basis-lexid
            (aif rep.basis.context-lexid car.it context-lexid)
-      (annotate 'pk-attached-soup
-        (list basis-lexid do.soup-dsl.dsl)))))
+      (annotate 'pk-hyped-soup (list basis-lexid do.soup-dsl.dsl)))))
 
 (def-pk-eval pk-lambdacalc-qq
   (pk-eval-qq lexid (pk-eval self.0 lexid dyn-hyperenv) self.1
@@ -347,11 +345,11 @@
           (err:+ "A macro was used with too many words in the form "
                  "body.")))
       ; NOTE: We don't unwrap word arguments that are
-      ; 'pk-sip-hype-staticenv singletons. Even if that would be
-      ; useful behavior, there should eventually be enough soup
-      ; manipulation power within Penknife to implement a replacement
+      ; 'pk-sip-hype singletons. Even if that would be useful
+      ; behavior, there should eventually be enough soup manipulation
+      ; power within Penknife to implement a replacement
       ; macro-building form there.
-      (zap [map [annotate 'pk-attached-soup (list lexid _)] _] args)
+      (zap [map [annotate 'pk-hyped-soup (list lexid _)] _] args)
       (withs (; TODO: Make a 'pk-fork-to-name method or something so
               ; that we don't have to scrape expressions like this.
               hyped-name (rep pk-fork-to-get.op-fork)
@@ -367,8 +365,8 @@
                     ; qq
                   (annotate 'pk-qq-basis (table))  ; leak
                   args))
-        (case type.func-result pk-attached-soup nil
-          (err "The result of a macro wasn't a 'pk-attached-soup."))
+        (case type.func-result pk-hyped-soup nil
+          (err "The result of a macro wasn't a 'pk-hyped-soup."))
         (let (result-lexid result-soup) rep.func-result
           (zap otokens result-soup)
           (unless single.result-soup

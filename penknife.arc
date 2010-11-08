@@ -362,7 +362,7 @@
 ;   (car rep._):  A symbol to be used as a variable name.
 ;   (cdr rep._):  A lexid (lexical ID).
 ;
-; pk-sip-hype-staticenv
+; pk-sip-hype
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A lexid (lexical ID).
 ;   rep._.1:  A 'pk-soup word to be compiled using that lexid.
@@ -1081,7 +1081,7 @@
     (pk-string-identifier it lexid)
       (~or (oi.olen> soup 1) oi.oempty.soup)
     (let sip (oref soup 0)
-      (case type.sip pk-sip-hype-staticenv
+      (case type.sip pk-sip-hype
         (let (inner-lexid inner-soup) rep.sip
           (pk-soup-identifier inner-soup inner-lexid))))))
 
@@ -1093,7 +1093,7 @@
   (unless (and (no oi.oempty.soup) (oi.olen< soup 2))
     (err "An identifier list wasn't exactly one sip: " soup))
   (zap [oref _ 0] soup)
-  (case type.soup pk-sip-hype-staticenv
+  (case type.soup pk-sip-hype
     (let (inner-lexid inner-soup) rep.soup
       (pk-identifier-list inner-soup inner-lexid))
     (do (case type.soup pk-sip-brackets nil
@@ -1152,12 +1152,12 @@
     (do.fail "The syntax was an empty pair of brackets.")))
 
 (rc:ontype pk-parse-sip (lexid static-hyperenv)
-             pk-sip-hype-staticenv pk-sip-hype-staticenv
+             pk-sip-hype pk-sip-hype
   (withs ((inner-lexid soup) rep.self
           tokens otokens.soup)
     (unless single.tokens
-      (do.fail:+ "The syntax was a 'pk-sip-hype-staticenv without "
-                 "exactly one word in it."))
+      (do.fail:+ "The syntax was a 'pk-sip-hype without exactly one "
+                 "word in it."))
     (pk-parse car.tokens inner-lexid static-hyperenv)))
 
 
