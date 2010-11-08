@@ -172,8 +172,7 @@
 ;
 ; (pk-alpha-id-char char)
 ; (pk-infix-id-char char)
-; (pk-string-identifier-with-env string lexid env)
-; (pk-soup-identifier-with-env soup lexid env)
+; (pk-string-identifier string lexid)
 ; (pk-soup-identifier soup lexid)
 ; (pk-identifier-list soup lexid env)
 ; (pk-parse-tl soup lexid static-hyperenv)          ; rulebook
@@ -1079,25 +1078,20 @@
   (~or pk-alpha-id-char.char (<= int.char 32)))
 
 ; This assumes the first argument is a string.
-(def pk-string-identifier-with-env (string lexid env)
+(def pk-string-identifier (string lexid)
   (when (or (all pk-alpha-id-char string)
             (all pk-infix-id-char string))
-    (list (annotate 'pk-hyped-sym (cons sym.string lexid)) env)))
+    (annotate 'pk-hyped-sym (cons sym.string lexid))))
 
 ; This assumes the first argument is a 'pk-soup value.
-(def pk-soup-identifier-with-env (soup lexid env)
+(def pk-soup-identifier (soup lexid)
   (aif soup->string.soup
-    (pk-string-identifier-with-env it lexid env)
+    (pk-string-identifier it lexid)
       (~or (oi.olen> soup 1) oi.oempty.soup)
     (let sip (oref soup 0)
       (case type.sip pk-sip-hype-staticenv
         (let (inner-lexid globalenv inner-soup) rep.sip
-          (pk-soup-identifier-with-env
-            inner-soup inner-lexid globalenv))))))
-
-; This assumes the first argument is a 'pk-soup value.
-(def pk-soup-identifier (soup lexid)
-  (car:pk-soup-identifier-with-env soup lexid nil))
+          (pk-soup-identifier inner-soup inner-lexid))))))
 
 (def pk-identifier-list (soup lexid)
   (zap otokens soup)
@@ -1122,20 +1116,13 @@
     (do.fail "The word wasn't simply a single non-character."))
   (pk-parse-sip (oref soup 0) lexid static-hyperenv))
 
-; TODO: See if this can be simpler.
 (mr:rule pk-parse (soup lexid static-hyperenv) identifier
-  (iflet (hyped-sym env) (pk-soup-identifier-with-env soup lexid
-                           (pk-hyperenv-get static-hyperenv lexid))
-    (let localenv (pk-hyperenv-get-local
-                    (if env
-                      (pk-hyperenv-overlap
-                        (pk-make-hyperenv lexid env) static-hyperenv)
-                      static-hyperenv)
-                    lexid)
-      (let name pk-hyped-sym-name.hyped-sym
-        (iflet (literal) (pk-staticenv-literal localenv name)
-          (pk-parse-literal-from-thunk thunk.literal localenv)
-          (pk-staticenv-get-var-forker localenv hyped-sym))))
+  (iflet hyped-sym (pk-soup-identifier soup lexid)
+    (let localenv (pk-hyperenv-get-local static-hyperenv lexid)
+      (iflet (literal) (pk-staticenv-literal
+                         localenv pk-hyped-sym-name.hyped-sym)
+        (pk-parse-literal-from-thunk thunk.literal localenv)
+        (pk-staticenv-get-var-forker localenv hyped-sym)))
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-parse (soup lexid static-hyperenv) infix
