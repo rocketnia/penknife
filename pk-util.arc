@@ -159,8 +159,8 @@
   " ")
 
 (def pk-stringquote-parser (op-fork body lexid static-hyperenv)
-  (pk-parse-literal-from-thunk (fn () soup->string-force.body)
-    (pk-hyperenv-get static-hyperenv lexid)))
+  (pk-parse-literal-from-thunk
+    (fn () soup->string-force.body) lexid static-hyperenv))
 
 (pk-dynenv-set-meta pk-replenv* 'q
   (pk-meta result      idfn
@@ -171,8 +171,7 @@
   (pk-parse-call-from-thunk
     (thunk:list:annotate 'pk-lambdacalc-literal
       (list:eval:read:+ "(fn () " soup->string-force.body ")"))
-    (pk-staticenv-default-op-parser:pk-hyperenv-get
-      static-hyperenv lexid)))
+    (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
 (pk-dynenv-set-meta pk-replenv* 'arc
   (pk-meta result      t
@@ -187,8 +186,7 @@
           "(lambda () " soup->string-force.body ")")
         (thunk:err:+ "Dropping to PLT Racket isn't supported on this "
                      "platform.")))
-    (pk-staticenv-default-op-parser:pk-hyperenv-get
-      static-hyperenv lexid)))
+    (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
 (pk-dynenv-set-meta pk-replenv* 'plt
   (pk-meta result      (~no plt)      ; NOTE: Jarc dislikes ~~.
@@ -206,8 +204,7 @@
               (= result plt.eval.expr))))
         (thunk:err:+ "Evaluating PLT Racket isn't supported on this "
                      "platform.")))
-    (pk-staticenv-default-op-parser:pk-hyperenv-get
-      static-hyperenv lexid)))
+    (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
 (pk-dynenv-set-meta pk-replenv* 'eval-plt
   (pk-meta result      (~no plt)           ; NOTE: Jarc dislikes ~~.
@@ -229,8 +226,7 @@
         (thunk:jvm!eval pk-jvm-js-engine* soup->string-force.body)
         (thunk:err:+ "Evaluating JavaScript isn't supported on this "
                      "platform.")))
-    (pk-staticenv-default-op-parser:pk-hyperenv-get
-      static-hyperenv lexid)))
+    (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
 (pk-dynenv-set-meta pk-replenv* 'js
   ; NOTE: Jarc dislikes ~~.
@@ -253,7 +249,7 @@
             (memo:thunk:if token-args
               (pk-parse car.token-args lexid static-hyperenv)
               (pk-parse-literal-from-thunk
-                thunk.idfn (pk-hyperenv-get static-hyperenv lexid))))
+                thunk.idfn lexid static-hyperenv)))
     (pk-parse-call-from-thunk
       (thunk:map pk-fork-to-get
         (cons op-fork
@@ -333,7 +329,7 @@
   (let token-args otokens.body
     (unless (is len.token-args 2)
       (err "An assignment body didn't have exactly two words in it."))
-    (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+    (pk-parse-leaf-from-thunk lexid static-hyperenv
       (thunk:let (var val) token-args
         (pk-fork-to-set (pk-parse var lexid static-hyperenv)
           (pk-fork-to-get:pk-parse val lexid static-hyperenv))))))
@@ -357,7 +353,7 @@
              set   [annotate 'pk-lambdacalc-set-meta
                      (list call.name-parser _)]
              meta  getter
-             op    (pk-staticenv-default-op-parser:pk-hyperenv-get
+             op    (pk-hyperenv-default-op-parser
                      static-hyperenv lexid))))))
 
 (pk-dynenv-set-meta pk-replenv* 'meta
@@ -368,7 +364,7 @@
 (def pk-infix-inverted-call-parser
        (op-fork body lexid static-hyperenv)
   (let as-default (memo:thunk:pk-call
-                    (pk-staticenv-default-op-parser:pk-hyperenv-get
+                    (pk-hyperenv-default-op-parser
                       static-hyperenv lexid)
                     op-fork body lexid static-hyperenv)
     (annotate 'pk-parse-fork

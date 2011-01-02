@@ -128,9 +128,10 @@
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-make-interactive-env)
-; (pk-staticenv-get-var-forker staticenv hyped-varname)
+; (pk-static-hyperenv-get-var-forker static-hyperenv hyped-varname)
 ; (pk-staticenv-default-op-parser self)        ; rulebook
 ; pk-comment-char*                             ; value of type 'char
+; (pk-dynenv-shadows self varname)             ; rulebook
 ; (pk-staticenv-read-parse-tl self lexid str)  ; rulebook
 ; (pk-staticenv-literal self name)             ; rulebook
 ; (pk-dynenv-ensure-binding self varname)      ; rulebook
@@ -147,7 +148,6 @@
 ; (pk-captures-of self)                                     ; rulebook
 ; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
-; (pk-hyperenv-get hyperenv lexid)
 ; (pk-hyperenv-get-safe-local hyperenv lexid)
 ; (pk-hyperenv-get-global hyperenv lexid)
 ; (pk-hyperenv-get-safe-both hyperenv lexid)
@@ -156,14 +156,18 @@
 ; (pk-hyperenv-shove place hyperenv-part error)             ; macro
 ; (pk-hyperenv-overlap a b)
 ; (pk-hyperenv-globals hyperenv)
+; (pk-hyperenv-traverse hyperenv lexid body)
+; (pk-hyperenv-default-op-parser hyperenv lexid)
+; (pk-hyperenv-literal hyperenv hyped-name)
 ; (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
+; (pk-dyn-hyperenv-get-binding hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-get hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-get-meta hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-set hyperenv hyped-varname new-value)
 ; (pk-dyn-hyperenv-set-meta hyperenv hyped-varname new-value)
 ;
-; (pk-parse-leaf-from-thunk staticenv getter)
-; (pk-parse-literal-from-thunk value-parser staticenv)
+; (pk-parse-leaf-from-thunk lexid static-hyperenv getter)
+; (pk-parse-literal-from-thunk value-parser lexid static-hyperenv)
 ; (pk-parse-call-from-thunk op-and-body-parser op-parser)
 ; (pk-var-forker-from-op op-parser)
 ;
@@ -431,7 +435,7 @@
 ;   step (which is to say, while looking up the whole lexid,
 ;   'var-lexid, and 'parent-lexid). If you need a more formal
 ;   description of this process, you should take a look at the
-;   implementation of 'pk-hyperenv-get.
+;   implementation of 'pk-hyperenv-traverse.
 
 
 (let lathe [+ lathe-dir* _ '.arc]
@@ -835,19 +839,28 @@
 (def pk-make-interactive-env ()
   (let rep (table) (annotate 'pk-interactive-env thunk.rep)))
 
-(def pk-staticenv-get-var-forker (staticenv hyped-varname)
-  (aif (aand (pk-dynenv-get-binding
-               staticenv pk-hyped-sym-name.hyped-varname)
-             (!var-forker:rep:pk-binding-get-meta car.it))
-    (pk-call car.it hyped-varname)
-    (let op-parser pk-staticenv-default-op-parser.staticenv
-      (pk-call pk-var-forker-from-op.op-parser hyped-varname))))
+(def pk-static-hyperenv-get-var-forker (static-hyperenv hyped-varname)
+  (let lexid pk-hyped-sym-lexid.hyped-varname
+    (iflet (literal) (pk-hyperenv-literal
+                       static-hyperenv hyped-varname)
+      (pk-parse-literal-from-thunk thunk.literal lexid static-hyperenv)
+      (aif (aand (pk-dyn-hyperenv-get-binding
+                   static-hyperenv hyped-varname)
+                 (!var-forker:rep:pk-binding-get-meta car.it))
+        (pk-call car.it hyped-varname)
+        (let op-parser (pk-hyperenv-default-op-parser
+                         static-hyperenv lexid)
+          (pk-call pk-var-forker-from-op.op-parser hyped-varname))))))
 
 (rc:ontype pk-staticenv-default-op-parser ()
              pk-interactive-env pk-interactive-env
-  pk-function-call-parser)
+  list.pk-function-call-parser)
 
 (= pk-comment-char* #\;)
+
+(rc:ontype pk-dynenv-shadows (varname)
+             pk-interactive-env pk-interactive-env
+  t)
 
 ; TODO: Allow read behavior customization among environments.
 (rc:ontype pk-staticenv-read-parse-tl (lexid str)
@@ -913,6 +926,10 @@
 ; of the list, so that we can use [map car vals._] or something to get
 ; the lexids.
 
+; TODO: See if it's still important for hyperenvironments to keep the
+; global environments as well as the local ones. Currently, it seems
+; the global ones just aren't used.
+
 (rc:ontype pk-captures-of () rc.any rc.any
   (err:+ "There's no existing 'pk-captures-of rule for "
          (tostring write.self) "."))
@@ -927,25 +944,6 @@
   (annotate 'pk-hyperenv
     (apply copy (table)
       (mappend [list _.0 (list _.1 _.1)] pair.args))))
-
-; TODO: Make sure this is only used intentionally. It used to just get
-; the local environment.
-(def pk-hyperenv-get (hyperenv lexid)
-  (aif (pk-hyperenv-get-safe-local hyperenv lexid)
-    car.it
-    ; NOTE: Rainbow doesn't treat a&b.c properly.
-    ; NOTE: Jarc doesn't like (let ((a . b) . c) d ...).
-    (iflet (var . parent) (acons&idfn lexid)
-      (let (var-name . var-lexid) var
-        ; NOTE: All of these calls can raise errors.
-        (ut:lets it (pk-hyperenv-get hyperenv var-lexid)
-                 it (pk-dynenv-get it var-name)
-                    (aif (pk-hyperenv-get-safe-local
-                           pk-captured-hyperenv.it parent)
-                      car.it
-                      (pk-hyperenv-get hyperenv it))))
-      (err:+ "A hyperenvironment didn't have a mapping for the base "
-             "lexid."))))
 
 (def pk-hyperenv-get-safe-local (hyperenv lexid)
   (awhen (pk-hyperenv-get-safe-both hyperenv lexid)
@@ -984,47 +982,80 @@
 (def pk-hyperenv-overlap (a b)
   (annotate 'pk-hyperenv (ut.tab+ rep.a rep.b)))
 
+; TODO: See if this is still useful.
 (def pk-hyperenv-globals (hyperenv)
   (annotate 'pk-hyperenv
     (listtab:accum acc
       (each (lexid (localenv globalenv)) rep.hyperenv
         (do.acc:list lexid (list globalenv globalenv))))))
 
+(def pk-hyperenv-traverse (hyperenv lexid body)
+  (or (aand (pk-hyperenv-get-safe-local hyperenv lexid)
+            (do.body car.it))
+      ; NOTE: Rainbow doesn't treat a&b.c properly.
+      ; NOTE: Jarc doesn't like (let ((a . b) . c) d ...).
+      (whenlet (capturevar . parent) (acons&idfn lexid)
+        (pk-hyperenv-traverse
+          (pk-captured-hyperenv:pk-dyn-hyperenv-get
+            hyperenv (annotate 'pk-hyped-sym capturevar))
+          parent body))))
+
+(def pk-hyperenv-default-op-parser (hyperenv lexid)
+  (aif (pk-hyperenv-traverse hyperenv lexid
+         pk-staticenv-default-op-parser)
+    car.it
+    (err "No default op parser was found.")))
+
+(def pk-hyperenv-literal (hyperenv hyped-name)
+  (let (name . lexid) rep.hyped-name
+    (pk-hyperenv-traverse hyperenv lexid
+      [pk-staticenv-literal _ name])))
+
 (def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
+  (aif (let (varname . lexid) rep.hyped-varname
+         (pk-hyperenv-traverse hyperenv lexid
+           [when (pk-dynenv-shadows _ varname)
+             (list:pk-dynenv-ensure-binding _ varname)]))
+    car.it
+    (err "A binding couldn't be ensured.")))
+
+(def pk-dyn-hyperenv-get-binding (hyperenv hyped-varname)
   (let (varname . lexid) rep.hyped-varname
-    (pk-dynenv-ensure-binding
-      (pk-hyperenv-get hyperenv lexid) varname)))
+    (pk-hyperenv-traverse hyperenv lexid
+      [when (pk-dynenv-shadows _ varname)
+        (pk-dynenv-get-binding _ varname)])))
 
 (def pk-dyn-hyperenv-get (hyperenv hyped-varname)
-  (let (varname . lexid) rep.hyped-varname
-    (pk-dynenv-get (pk-hyperenv-get hyperenv lexid) varname)))
+  (pk-binding-get:pk-dyn-hyperenv-ensure-binding
+    hyperenv hyped-varname))
 
 (def pk-dyn-hyperenv-get-meta (hyperenv hyped-varname)
-  (let (varname . lexid) rep.hyped-varname
-    (pk-dynenv-get-meta (pk-hyperenv-get hyperenv lexid) varname)))
+  (pk-binding-get-meta:pk-dyn-hyperenv-ensure-binding
+    hyperenv hyped-varname))
 
 (def pk-dyn-hyperenv-set (hyperenv hyped-varname new-value)
-  (let (varname . lexid) rep.hyped-varname
-    (pk-dynenv-set
-      (pk-hyperenv-get hyperenv lexid) varname new-value)))
+  (pk-binding-set
+    (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
+    new-value))
 
 (def pk-dyn-hyperenv-set-meta (hyperenv hyped-varname new-value)
-  (let (varname . lexid) rep.hyped-varname
-    (pk-dynenv-set-meta
-      (pk-hyperenv-get hyperenv lexid) varname new-value)))
+  (pk-binding-set-meta
+    (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
+    new-value))
 
 
-(def pk-parse-leaf-from-thunk (staticenv getter)
+(def pk-parse-leaf-from-thunk (lexid static-hyperenv getter)
   (zap memo getter)
   (annotate 'pk-parse-fork
     (obj get   getter
          set   [err:+ "An attempt was made to parse an ineligible "
                       "form for setting."]
          meta  getter
-         op    pk-staticenv-default-op-parser.staticenv)))
+         op
+           (pk-hyperenv-default-op-parser static-hyperenv lexid))))
 
-(def pk-parse-literal-from-thunk (value-parser staticenv)
-  (pk-parse-leaf-from-thunk staticenv
+(def pk-parse-literal-from-thunk (value-parser lexid static-hyperenv)
+  (pk-parse-leaf-from-thunk lexid static-hyperenv
     (thunk:annotate 'pk-lambdacalc-literal (list call.value-parser))))
 
 ; The 'op-and-body-parser parameter should be a function that returns
@@ -1057,8 +1088,7 @@
     (thunk:cons pk-fork-to-get.op-fork
       (map [pk-fork-to-get:pk-parse _ lexid static-hyperenv]
            otokens.body))
-    (pk-staticenv-default-op-parser:pk-hyperenv-get
-      static-hyperenv lexid)))
+    (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
 
 ; For efficiency, this assumes the argument is a character.
@@ -1110,11 +1140,7 @@
 
 (mr:rule pk-parse (soup lexid static-hyperenv) identifier
   (iflet hyped-sym (pk-soup-identifier soup lexid)
-    (let staticenv (pk-hyperenv-get static-hyperenv lexid)
-      (iflet (literal) (pk-staticenv-literal
-                         staticenv pk-hyped-sym-name.hyped-sym)
-        (pk-parse-literal-from-thunk thunk.literal staticenv)
-        (pk-staticenv-get-var-forker staticenv hyped-sym)))
+    (pk-static-hyperenv-get-var-forker static-hyperenv hyped-sym)
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-parse (soup lexid static-hyperenv) infix
@@ -1348,8 +1374,8 @@
 (def pkload (env filename)
   (w/infile str filename (pkdo env str)))
 
-; This is just a convenience for parsing things at the REPL.
+; This is just a convenience utility for parsing things at the REPL.
 (def pkparse (str)
   ; NOTE: Rainbow treats a&b.c as (andf a b.c).
   (pk-fork-to-get:pk-parse (start-word&finish-bracket-word str)
-    pk-repllexid* (pk-make-hyperenv pk-repllexid* pk-replenv*)))
+    nil (pk-make-hyperenv nil pk-replenv*)))

@@ -98,13 +98,13 @@
 
 
 (def pk-hefty-fn-rest-parser (op-fork body lexid static-hyperenv)
-  (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+  (pk-parse-leaf-from-thunk lexid static-hyperenv
     (thunk:annotate 'pk-lambdacalc-hefty-fn
       (pk-fork-to-get:pk-thin-fn-rest-parser
         op-fork body lexid static-hyperenv))))
 
 (def pk-hefty-fn-parser (op-fork body lexid static-hyperenv)
-  (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+  (pk-parse-leaf-from-thunk lexid static-hyperenv
     (thunk:annotate 'pk-lambdacalc-hefty-fn
       (pk-fork-to-get:pk-thin-fn-parser
         op-fork body lexid static-hyperenv))))

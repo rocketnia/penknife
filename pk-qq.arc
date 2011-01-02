@@ -309,7 +309,7 @@
                             "of some quasiquoted soup."))
                    (do (do.acc `(bracket ,@(self rep.trigger.0)))
                        (= soup rest)))))))
-    (pk-parse-leaf-from-thunk (pk-hyperenv-get static-hyperenv lexid)
+    (pk-parse-leaf-from-thunk lexid static-hyperenv
       (thunk:annotate 'pk-lambdacalc-qq
         (list pk-fork-to-get.op-fork do.parse-into-dsl.body)))))
 
@@ -401,8 +401,7 @@
               leak (do.check:pk-soup-identifier leak lexid)
               args (map check (pk-identifier-list args lexid))
               rest (do.check:pk-soup-identifier rest lexid))
-        (pk-parse-leaf-from-thunk
-          (pk-hyperenv-get static-hyperenv lexid)
+        (pk-parse-leaf-from-thunk lexid static-hyperenv
           (thunk:annotate 'pk-lambdacalc-mc
             (list len.args t
               (do.build-fn:pk-finish-fn
@@ -423,8 +422,7 @@
               qq (do.check:pk-soup-identifier qq lexid)
               leak (do.check:pk-soup-identifier leak lexid)
               args (map check (pk-identifier-list args lexid)))
-        (pk-parse-leaf-from-thunk
-          (pk-hyperenv-get static-hyperenv lexid)
+        (pk-parse-leaf-from-thunk lexid static-hyperenv
           (thunk:annotate 'pk-lambdacalc-mc
             (list len.args nil
               (do.build-fn:pk-finish-fn

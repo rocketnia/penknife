@@ -50,15 +50,18 @@
 ; (pk-copy-hyperenv hyperenv)
 ; (pk-hyperenv-shadow-assoclist hyperenv binds)
 ;
-; (pk-staticenv-default-op-parser)        ; external rulebook
-; (pk-staticenv-read-parse-tl lexid str)  ; external rulebook
-; (pk-staticenv-literal name)             ; external rulebook
-; (pk-dynenv-ensure-binding varname)      ; external rulebook
-; (pk-dynenv-get-binding varname)         ; external rulebook
-; (pk-dynenv-get varname)                 ; external rulebook
-; (pk-dynenv-get-meta varname)            ; external rulebook
-; (pk-dynenv-set varname new-value)       ; external rulebook
-; (pk-dynenv-set-meta varname new-value)  ; external rulebook
+; pk-local-limit-env*  ; value of type 'pk-local-limit-env
+;
+; (pk-staticenv-default-op-parser self)        ; external rulebook
+; (pk-dynenv-shadows self varname)             ; external rulebook
+; (pk-staticenv-read-parse-tl self lexid str)  ; external rulebook
+; (pk-staticenv-literal self name)             ; external rulebook
+; (pk-dynenv-ensure-binding self varname)      ; external rulebook
+; (pk-dynenv-get-binding self varname)         ; external rulebook
+; (pk-dynenv-get self varname)                 ; external rulebook
+; (pk-dynenv-get-meta self varname)            ; external rulebook
+; (pk-dynenv-set varname self new-value)       ; external rulebook
+; (pk-dynenv-set-meta self varname new-value)  ; external rulebook
 ;
 ; (pk-mangle hyped-sym)
 ;
@@ -94,6 +97,12 @@
 ;             deal with everything except looking up the local
 ;             bindings we keep here.
 ;
+; pk-local-limit-env
+;   rep: Ignored. This value represents an environment that doesn't do
+;        anything on its own. Instead, operations on it are supposed
+;        to trickle down through the other environments in the
+;        hyperenvironment according to 'pk-hyperenv-traverse.
+;
 ; pk-lambdacalc-thin-fn
 ;   rep: A list which supports the following fields:
 ;   rep._.0:  A proper list of hyped symbols representing the non-rest
@@ -121,15 +130,13 @@
 (def pk-copy-hyperenv (hyperenv)
   (annotate 'pk-hyperenv (copy rep.hyperenv)))
 
-; TODO: See if hyperenvironments are going to use any type other than
-; 'pk-interactive-env for individual global environments.
 (def pk-hyperenv-shadow-assoclist (hyperenv binds)
   (ut:ret new-hyperenv pk-copy-hyperenv.hyperenv
     (let binds-sobjs (table)
       (each (hyped-sym meta) binds
         (let (name . lexid) rep.hyped-sym
           (or= rep.new-hyperenv.lexid
-                 (let env (pk-make-interactive-env) (list env env)))
+                 (list pk-local-limit-env* pk-local-limit-env*))
           (= (.name:or= do.binds-sobjs.lexid (table)) list.meta)))
       (each (lexid (local-env global-env)) rep.new-hyperenv
         (= rep.new-hyperenv.lexid
@@ -138,16 +145,39 @@
                    global-env))))))
 
 
+(= pk-local-limit-env* (annotate 'pk-local-limit-env nil))
+
+
 (rc:ontype pk-staticenv-default-op-parser ()
              pk-shadowed-env pk-shadowed-env
   (pk-staticenv-default-op-parser rep.self.1))
+
+(rc:ontype pk-staticenv-default-op-parser ()
+             pk-local-limit-env pk-local-limit-env
+  nil)
+
+(rc:ontype pk-dynenv-shadows (varname)
+             pk-shadowed-env pk-shadowed-env
+  (if rep.self.0.varname t (pk-dynenv-shadows rep.self.1 varname)))
+
+(rc:ontype pk-dynenv-shadows (varname)
+             pk-local-limit-env pk-local-limit-env
+  nil)
 
 (rc:ontype pk-staticenv-read-parse-tl (lexid str)
              pk-shadowed-env pk-shadowed-env
   (pk-staticenv-read-parse-tl rep.self.1 lexid str))
 
+(rc:ontype pk-staticenv-read-parse-tl (lexid str)
+             pk-local-limit-env pk-local-limit-env
+  (err "A 'pk-local-limit-env value can't read-parse-tl."))
+
 (rc:ontype pk-staticenv-literal (name) pk-shadowed-env pk-shadowed-env
   (pk-staticenv-literal rep.self.1 name))
+
+(rc:ontype pk-staticenv-literal (name)
+             pk-local-limit-env pk-local-limit-env
+  nil)
 
 (rc:ontype pk-dynenv-ensure-binding (varname)
              pk-shadowed-env pk-shadowed-env
@@ -155,23 +185,48 @@
     car.it
     (pk-dynenv-ensure-binding rep.self.1 varname)))
 
+(rc:ontype pk-dynenv-ensure-binding (varname)
+             pk-local-limit-env pk-local-limit-env
+  (err "A 'pk-local-limit-env value can't ensure-binding."))
+
 (rc:ontype pk-dynenv-get-binding (varname)
              pk-shadowed-env pk-shadowed-env
   (or rep.self.0.varname (pk-dynenv-get-binding rep.self.1 varname)))
 
+(rc:ontype pk-dynenv-get-binding (varname)
+             pk-local-limit-env pk-local-limit-env
+  nil)
+
 (rc:ontype pk-dynenv-get (varname) pk-shadowed-env pk-shadowed-env
+  (pk-binding-get:pk-dynenv-ensure-binding self varname))
+
+(rc:ontype pk-dynenv-get (varname)
+             pk-local-limit-env pk-local-limit-env
   (pk-binding-get:pk-dynenv-ensure-binding self varname))
 
 (rc:ontype pk-dynenv-get-meta (varname)
              pk-shadowed-env pk-shadowed-env
   (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
 
+(rc:ontype pk-dynenv-get-meta (varname)
+             pk-local-limit-env pk-local-limit-env
+  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
+
 (rc:ontype pk-dynenv-set (varname new-value)
              pk-shadowed-env pk-shadowed-env
   (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
 
+(rc:ontype pk-dynenv-set (varname new-value)
+             pk-local-limit-env pk-local-limit-env
+  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
+
 (rc:ontype pk-dynenv-set-meta (varname new-value)
              pk-shadowed-env pk-shadowed-env
+  (pk-binding-set-meta
+    (pk-dynenv-ensure-binding self varname) new-value))
+
+(rc:ontype pk-dynenv-set-meta (varname new-value)
+             pk-local-limit-env pk-local-limit-env
   (pk-binding-set-meta
     (pk-dynenv-ensure-binding self varname) new-value))
 
@@ -411,8 +466,7 @@
               [or _ (err "A fn-rest parameter wasn't an identifier.")]
             args (map check (pk-identifier-list args lexid))
             rest (do.check:pk-soup-identifier rest lexid))
-      (pk-parse-leaf-from-thunk
-        (pk-hyperenv-get static-hyperenv lexid)
+      (pk-parse-leaf-from-thunk lexid static-hyperenv
         (thunk:pk-finish-fn args list.rest body lexid
           (pk-hyperenv-shadow-assoclist static-hyperenv
             (map [list _ pk-nometa*] (join args list.rest))))))))
@@ -424,8 +478,7 @@
     (withs ((args . body) token-args
             check [or _ (err "A fn parameter wasn't an identifier.")]
             args (map check (pk-identifier-list args lexid)))
-      (pk-parse-leaf-from-thunk
-        (pk-hyperenv-get static-hyperenv lexid)
+      (pk-parse-leaf-from-thunk lexid static-hyperenv
         (thunk:pk-finish-fn args nil body lexid
           (pk-hyperenv-shadow-assoclist static-hyperenv
             (map [list _ pk-nometa*] args)))))))
