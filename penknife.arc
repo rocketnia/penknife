@@ -148,14 +148,7 @@
 ; (pk-captures-of self)                                     ; rulebook
 ; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
-; (pk-hyperenv-get-safe-local hyperenv lexid)
-; (pk-hyperenv-get-global hyperenv lexid)
-; (pk-hyperenv-get-safe-both hyperenv lexid)
-; (pk-hyperenv-get-both hyperenv lexid)
-; (pk-hyperenv-combine a b)
-; (pk-hyperenv-shove place hyperenv-part error)             ; macro
-; (pk-hyperenv-overlap a b)
-; (pk-hyperenv-globals hyperenv)
+; (pk-hyperenv-get-env hyperenv lexid)
 ; (pk-hyperenv-traverse hyperenv lexid body)
 ; (pk-hyperenv-default-op-parser hyperenv lexid)
 ; (pk-hyperenv-literal hyperenv hyped-name)
@@ -353,11 +346,8 @@
 ;
 ; pk-hyperenv
 ;   rep: A table mapping lexids ("lexical IDs," which identify
-;        independent sections of textual code) to two-element proper
-;        lists supporting the following fields:
-;   rep._.lexid.0:  A local environment.
-;   rep._.lexid.1:  A global environment corresponding to that local
-;                   environment.
+;        independent sections of textual code) to singleton lists
+;        containing environments.
 ;
 ; pk-hyped-sym
 ;   rep: A cons cell which supports the following fields, which
@@ -926,72 +916,25 @@
 ; of the list, so that we can use [map car vals._] or something to get
 ; the lexids.
 
-; TODO: See if it's still important for hyperenvironments to keep the
-; global environments as well as the local ones. Currently, it seems
-; the global ones just aren't used.
-
 (rc:ontype pk-captures-of () rc.any rc.any
   (err:+ "There's no existing 'pk-captures-of rule for "
          (tostring write.self) "."))
 
 (def pk-captured-hyperenv (capturer)
   (apply pk-make-hyperenv
-    (ut:mappendlet (lexid (globalenv)) (tablist:rep
-                                         pk-captures-of.capturer)
-      (list lexid globalenv))))
+    (ut:mappendlet (lexid (env)) (tablist:rep pk-captures-of.capturer)
+      (list lexid env))))
 
 (def pk-make-hyperenv args
   (annotate 'pk-hyperenv
     (apply copy (table)
-      (mappend [list _.0 (list _.1 _.1)] pair.args))))
+      (mappend [list _.0 (list _.1)] pair.args))))
 
-(def pk-hyperenv-get-safe-local (hyperenv lexid)
-  (awhen (pk-hyperenv-get-safe-both hyperenv lexid)
-    (list car.it)))
-
-(def pk-hyperenv-get-global (hyperenv lexid)
-  (cadr:pk-hyperenv-get-both hyperenv lexid))
-
-(def pk-hyperenv-get-safe-both (hyperenv lexid)
+(def pk-hyperenv-get-env (hyperenv lexid)
   rep.hyperenv.lexid)
 
-(def pk-hyperenv-get-both (hyperenv lexid)
-  (or (pk-hyperenv-get-safe-both hyperenv lexid)
-      (err:+ "A hyperenvironment was indexed with an unsupported "
-             "lexid: " (tostring write.hyperenv) " with "
-             (tostring write.lexid))))
-
-(def pk-hyperenv-combine (a b)
-  (zap rep a)
-  (catch:annotate 'pk-hyperenv
-    (ut:ret result copy.a
-      (each (lexid (b-local-env b-global-env)) rep.b
-        (iflet (a-local-env a-global-env) do.a.lexid
-          (unless (and (is a-local-env b-local-env)
-                       (is a-global-env b-global-env))
-            throw.nil)
-          (= do.result.lexid (list b-local-env b-global-env)))))))
-
-(mac pk-hyperenv-shove (place hyperenv-part error)
-  (w/uniq g-prev
-    `(zap (fn (,g-prev)
-            (or (pk-hyperenv-combine ,g-prev ,hyperenv-part)
-                (err ,error)))
-          ,place)))
-
-(def pk-hyperenv-overlap (a b)
-  (annotate 'pk-hyperenv (ut.tab+ rep.a rep.b)))
-
-; TODO: See if this is still useful.
-(def pk-hyperenv-globals (hyperenv)
-  (annotate 'pk-hyperenv
-    (listtab:accum acc
-      (each (lexid (localenv globalenv)) rep.hyperenv
-        (do.acc:list lexid (list globalenv globalenv))))))
-
 (def pk-hyperenv-traverse (hyperenv lexid body)
-  (or (aand (pk-hyperenv-get-safe-local hyperenv lexid)
-            (do.body car.it))
+  (or (aand (pk-hyperenv-get-env hyperenv lexid) (do.body car.it))
       ; NOTE: Rainbow doesn't treat a&b.c properly.
       ; NOTE: Jarc doesn't like (let ((a . b) . c) d ...).
       (whenlet (capturevar . parent) (acons&idfn lexid)

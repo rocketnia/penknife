@@ -325,7 +325,7 @@
   (pk-meta result
              (annotate 'pk-mc-info
                (list:annotate 'pk-captures
-                 (listtab:map [list _ (pk-hyperenv-get-safe-local
+                 (listtab:map [list _ (pk-hyperenv-get-env
                                         dyn-hyperenv _)]
                               pk-hyperenv-lexids.dyn-hyperenv)))
            var-forker  (list:pk-var-forker-from-op:pk-wrapmc-op

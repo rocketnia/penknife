@@ -138,11 +138,10 @@
           (or= rep.new-hyperenv.lexid
                  (list pk-local-limit-env* pk-local-limit-env*))
           (= (.name:or= do.binds-sobjs.lexid (table)) list.meta)))
-      (each (lexid (local-env global-env)) rep.new-hyperenv
+      (each (lexid (env)) rep.new-hyperenv
         (= rep.new-hyperenv.lexid
-             (list (pk-env-shadow-sobj
-                     local-env (or do.binds-sobjs.lexid (table)))
-                   global-env))))))
+             (list:pk-env-shadow-sobj env
+               (or do.binds-sobjs.lexid (table))))))))
 
 
 (= pk-local-limit-env* (annotate 'pk-local-limit-env nil))
