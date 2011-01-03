@@ -105,6 +105,11 @@
 ; (slurp+ a b)                                    ; rulebook
 ; (o+binary a b)                                  ; rulebook
 ; (o+ first . rest)
+; (o+streamer self)                               ; rulebook
+; (fn-oadd self segment)                          ; rulebook
+; (oadd place segment)                            ; macro
+; (oinside self)                                  ; rulebook
+; (qo+ first . rest)
 ; (soup->string soup)
 ; (slurp->string self)                            ; rulebook
 ; (soup->list soup)
@@ -213,6 +218,18 @@
 ;   rep._!read:   Blocks if necessary and returns the next character
 ;                 in the stream, consuming it. On end-of-file, this
 ;                 returns nil.
+;
+; basic-streamer
+;   rep: A table which supports the following fields:
+;   rep._!test: A unary function returning a boolean that indicates
+;               whether its argument is a valid argument for this
+;               operation.
+;   rep._!args: A proper list of the arguments accumulated so far, in
+;               reverse order. This field is settable.
+;   rep._!func: A unary function which takes a list of accumulated
+;               arguments in reverse order and returns a result. This
+;               function will be using with the value of rep._!args to
+;               calculate the 'oinside of this 'basic-streamer value.
 ;
 ; pk-soup
 ;   rep: A proper list containing nonempty sequences (called "slurps")
@@ -750,6 +767,48 @@
 
 (def o+ (first . rest)
   (ut.foldl o+binary first rest))
+
+(rc:ontype o+streamer () pk-soup pk-soup
+  (annotate 'basic-streamer
+    (obj test [isa _ 'pk-soup] args list.self
+      ; Note that '_ is the accumulated argument list in reverse
+      ; order.
+      func [iflet rev-slurp-lists (trues rep _)
+             (let result-slurps pop.rev-slurp-lists
+               (each rev-slurp-list rev-slurp-lists
+                 (zap rev rev-slurp-list)
+                 (each slurp (rev:slurp+ pop.rev-slurp-list
+                                         pop.result-slurps)
+                   (push slurp result-slurps))
+                 (each slurp rev-slurp-list
+                   (push slurp result-slurps)))
+               (annotate 'pk-soup result-slurps))
+             _.0])))
+
+(rc:ontype fn-oadd (segment) basic-streamer
+  (unless rep.self!test.segment
+    (fail:+ "The segment to add to a 'basic-streamer value didn't "
+            "satisfy its test."))
+  (push segment rep.self!args)
+  self)
+
+(mac oadd (place segment)
+  (w/uniq g-streamer
+    `(zap (fn (,g-streamer) (fn-oadd ,g-streamer ,segment)) ,place)))
+
+(rc:ontype oinside () basic-streamer basic-streamer
+  (rep.self!func rep.self!args))
+
+; This strategy was introduced at
+; <http://arclanguage.org/item?id=13044>.
+(def qo+ (first . rest)
+  (oinside:ut:ret s o+streamer.first
+    (each arg rest
+      (oadd s arg))))
+
+; TODO: Figure out whether there's any significant performance boost.
+; Either way, remove the old 'o+.
+(= o+ qo+)
 
 (def soup->string (soup)
   ; NOTE: On Rainbow, (apply string '("something")) and
