@@ -29,7 +29,7 @@
 
 
 ; This is a plugin for Penknife. To use it, load it after you load
-; penknife.arc.
+; pk-core.arc.
 ;
 ; This installs several utilities in 'pk-replenv*.
 

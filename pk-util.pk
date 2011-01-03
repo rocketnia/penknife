@@ -29,7 +29,7 @@
 
 
 ; This is a plugin for Penknife. To use it, you must first load
-; penknife.arc, pk-thin-fn.arc, and pk-hefty-fn.arc, in that order.
+; pk-core.arc, pk-thin-fn.arc, and pk-hefty-fn.arc, in that order.
 ; Then load this using (pkload pk-replenv* "your/path/to/pk-util.pk").
 ;
 ; This installs a couple of utilities in the environment it's loaded

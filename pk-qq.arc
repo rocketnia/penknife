@@ -29,9 +29,9 @@
 
 
 ; This is a plugin for Penknife. To use it, load it just after you
-; load penknife.arc and pk-thin-fn.arc. To use 'hm and 'hm*, you
-; should also load pk-hefty-fn.arc at some point, but it doesn't
-; matter whether you load that file before or after this one.
+; load pk-core.arc and pk-thin-fn.arc. To use 'hm and 'hm*, you should
+; also load pk-hefty-fn.arc at some point, but it doesn't matter
+; whether you load that file before or after this one.
 ;
 ; This installs some utilities for writing macros. Macros are deeply
 ; tied together with quasiquotation and soup in Penknife, and it's

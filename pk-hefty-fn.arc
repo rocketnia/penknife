@@ -29,7 +29,7 @@
 
 
 ; This is a plugin for Penknife. To use it, load it just after you
-; load penknife.arc and pk-thin-fn.arc.
+; load pk-core.arc and pk-thin-fn.arc.
 ;
 ; This installs some lambda forms, 'hf and 'hf*, which parse to a new
 ; Penknife expression type, 'pk-lambdacalc-hefty-fn. When an

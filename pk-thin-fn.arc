@@ -29,7 +29,7 @@
 
 
 ; This is a plugin for Penknife. To use it, load it just after you
-; load penknife.arc and pk-util.arc.
+; load pk-core.arc and pk-util.arc.
 ;
 ; This installs some lambda forms, 'tf and 'tf*, which parse to a new
 ; Penknife expression type, 'pk-lambdacalc-thin-fn. When an expression

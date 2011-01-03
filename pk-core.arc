@@ -1,4 +1,4 @@
-; penknife.arc
+; pk-core.arc
 
 
 ; Copyright (c) 2010 Ross Angle
