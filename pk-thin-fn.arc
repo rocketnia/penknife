@@ -55,7 +55,6 @@
 ; (pk-staticenv-default-op-parser self)        ; external rulebook
 ; (pk-dynenv-shadows self varname)             ; external rulebook
 ; (pk-staticenv-read-parse-tl self lexid str)  ; external rulebook
-; (pk-staticenv-literal self name)             ; external rulebook
 ; (pk-dynenv-ensure-binding self varname)      ; external rulebook
 ; (pk-dynenv-get-binding self varname)         ; external rulebook
 ; (pk-dynenv-get self varname)                 ; external rulebook
@@ -170,13 +169,6 @@
 (rc:ontype pk-staticenv-read-parse-tl (lexid str)
              pk-local-limit-env pk-local-limit-env
   (err "A 'pk-local-limit-env value can't read-parse-tl."))
-
-(rc:ontype pk-staticenv-literal (name) pk-shadowed-env pk-shadowed-env
-  (pk-staticenv-literal rep.self.1 name))
-
-(rc:ontype pk-staticenv-literal (name)
-             pk-local-limit-env pk-local-limit-env
-  nil)
 
 (rc:ontype pk-dynenv-ensure-binding (varname)
              pk-shadowed-env pk-shadowed-env

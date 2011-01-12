@@ -138,7 +138,6 @@
 ; pk-comment-char*                             ; value of type 'char
 ; (pk-dynenv-shadows self varname)             ; rulebook
 ; (pk-staticenv-read-parse-tl self lexid str)  ; rulebook
-; (pk-staticenv-literal self name)             ; rulebook
 ; (pk-dynenv-ensure-binding self varname)      ; rulebook
 ; (pk-dynenv-get-binding self varname)         ; rulebook
 ; (pk-dynenv-get self varname)                 ; rulebook
@@ -156,7 +155,6 @@
 ; (pk-hyperenv-get-env hyperenv lexid)
 ; (pk-hyperenv-traverse hyperenv lexid body)
 ; (pk-hyperenv-default-op-parser hyperenv lexid)
-; (pk-hyperenv-literal hyperenv hyped-name)
 ; (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-get-binding hyperenv hyped-varname)
 ; (pk-dyn-hyperenv-get hyperenv hyped-varname)
@@ -890,16 +888,13 @@
 
 (def pk-static-hyperenv-get-var-forker (static-hyperenv hyped-varname)
   (let lexid pk-hyped-sym-lexid.hyped-varname
-    (iflet (literal) (pk-hyperenv-literal
-                       static-hyperenv hyped-varname)
-      (pk-parse-literal-from-thunk thunk.literal lexid static-hyperenv)
-      (aif (aand (pk-dyn-hyperenv-get-binding
-                   static-hyperenv hyped-varname)
-                 (!var-forker:rep:pk-binding-get-meta car.it))
-        (pk-call car.it hyped-varname)
-        (let op-parser (pk-hyperenv-default-op-parser
-                         static-hyperenv lexid)
-          (pk-call pk-var-forker-from-op.op-parser hyped-varname))))))
+    (aif (aand (pk-dyn-hyperenv-get-binding
+                 static-hyperenv hyped-varname)
+               (!var-forker:rep:pk-binding-get-meta car.it))
+      (pk-call car.it hyped-varname)
+      (let op-parser (pk-hyperenv-default-op-parser
+                       static-hyperenv lexid)
+        (pk-call pk-var-forker-from-op.op-parser hyped-varname)))))
 
 (rc:ontype pk-staticenv-default-op-parser ()
              pk-interactive-env pk-interactive-env
@@ -917,13 +912,6 @@
   (awhen (start-word&finish-bracket-word:comment-ignorer
            str pk-comment-char*)
     (list:pk-parse-tl it lexid (pk-make-hyperenv lexid self))))
-
-; TODO: Allow literal syntax customization among environments.
-(rc:ontype pk-staticenv-literal (name)
-             pk-interactive-env pk-interactive-env
-  (zap [string:or _ "nil"] name)
-  (when (all digit name)
-    (list int.name)))
 
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
@@ -1007,11 +995,6 @@
          pk-staticenv-default-op-parser)
     car.it
     (err "No default op parser was found.")))
-
-(def pk-hyperenv-literal (hyperenv hyped-name)
-  (let (name . lexid) rep.hyped-name
-    (pk-hyperenv-traverse hyperenv lexid
-      [pk-staticenv-literal _ name])))
 
 (def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
   (aif (let (varname . lexid) rep.hyped-varname
