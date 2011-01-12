@@ -56,7 +56,6 @@
 ; (pk-env-read-parse-tl self lexid str)     ; external rulebook
 ; (pk-env-default-op-parser self)           ; external rulebook
 ; (pk-env-ensure-binding self varname)      ; external rulebook
-; (pk-env-get-binding self varname)         ; external rulebook
 ; (pk-env-get self varname)                 ; external rulebook
 ; (pk-env-get-meta self varname)            ; external rulebook
 ; (pk-env-set varname self new-value)       ; external rulebook
@@ -177,14 +176,6 @@
 (rc:ontype pk-env-ensure-binding (varname)
              pk-local-limit-env pk-local-limit-env
   (err "A 'pk-local-limit-env value can't ensure-binding."))
-
-(rc:ontype pk-env-get-binding (varname)
-             pk-shadowed-env pk-shadowed-env
-  (or rep.self.0.varname (pk-env-get-binding rep.self.1 varname)))
-
-(rc:ontype pk-env-get-binding (varname)
-             pk-local-limit-env pk-local-limit-env
-  nil)
 
 (rc:ontype pk-env-get (varname) pk-shadowed-env pk-shadowed-env
   (pk-binding-get:pk-env-ensure-binding self varname))

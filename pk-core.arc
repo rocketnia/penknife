@@ -139,7 +139,6 @@
 ; (pk-env-read-parse-tl self lexid str)  ; rulebook
 ; (pk-env-default-op-parser self)        ; rulebook
 ; (pk-env-ensure-binding self varname)   ; rulebook
-; (pk-env-get-binding self varname)      ; rulebook
 ; (pk-env-get self varname)              ; rulebook
 ; (pk-env-get-meta self varname)         ; rulebook
 ; (pk-env-set self varname)              ; rulebook
@@ -156,7 +155,6 @@
 ; (pk-hyperenv-traverse hyperenv lexid body)
 ; (pk-hyperenv-default-op-parser hyperenv lexid)
 ; (pk-hyperenv-ensure-binding hyperenv hyped-varname)
-; (pk-hyperenv-get-binding hyperenv hyped-varname)
 ; (pk-hyperenv-get hyperenv hyped-varname)
 ; (pk-hyperenv-get-meta hyperenv hyped-varname)
 ; (pk-hyperenv-set hyperenv hyped-varname new-value)
@@ -888,8 +886,8 @@
 
 (def pk-hyperenv-get-var-forker (static-hyperenv hyped-varname)
   (let lexid pk-hyped-sym-lexid.hyped-varname
-    (aif (aand (pk-hyperenv-get-binding static-hyperenv hyped-varname)
-               (!var-forker:rep:pk-binding-get-meta car.it))
+    (aif (!var-forker:rep:pk-binding-get-meta
+           (pk-hyperenv-ensure-binding static-hyperenv hyped-varname))
       (pk-call car.it hyped-varname)
       (let op-parser (pk-hyperenv-default-op-parser
                        static-hyperenv lexid)
@@ -920,10 +918,6 @@
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
       (list:+ "The variable \"" (or varname "nil") "\" "
               "is unbound."))))
-
-(rc:ontype pk-env-get-binding (varname)
-             pk-interactive-env pk-interactive-env
-  (.varname:rep.self))
 
 (rc:ontype pk-env-get (varname) pk-interactive-env pk-interactive-env
   (pk-binding-get:pk-env-ensure-binding self varname))
@@ -1000,12 +994,6 @@
              (list:pk-env-ensure-binding _ varname)]))
     car.it
     (err "A binding couldn't be ensured.")))
-
-(def pk-hyperenv-get-binding (hyperenv hyped-varname)
-  (let (varname . lexid) rep.hyped-varname
-    (pk-hyperenv-traverse hyperenv lexid
-      [when (pk-env-shadows _ varname)
-        (pk-env-get-binding _ varname)])))
 
 (def pk-hyperenv-get (hyperenv hyped-varname)
   (pk-binding-get:pk-hyperenv-ensure-binding hyperenv hyped-varname))
