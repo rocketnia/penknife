@@ -55,7 +55,7 @@
 ; (pk-env-shadows self varname)             ; external rulebook
 ; (pk-env-read-parse-tl self lexid str)     ; external rulebook
 ; (pk-env-default-op-parser self)           ; external rulebook
-; (pk-env-ensure-binding self varname)      ; external rulebook
+; (pk-env-get-binding self varname)         ; external rulebook
 ; (pk-env-get self varname)                 ; external rulebook
 ; (pk-env-get-meta self varname)            ; external rulebook
 ; (pk-env-set varname self new-value)       ; external rulebook
@@ -167,46 +167,44 @@
              pk-local-limit-env pk-local-limit-env
   nil)
 
-(rc:ontype pk-env-ensure-binding (varname)
+(rc:ontype pk-env-get-binding (varname)
              pk-shadowed-env pk-shadowed-env
   (aif rep.self.0.varname
     car.it
-    (pk-env-ensure-binding rep.self.1 varname)))
+    (pk-env-get-binding rep.self.1 varname)))
 
-(rc:ontype pk-env-ensure-binding (varname)
+(rc:ontype pk-env-get-binding (varname)
              pk-local-limit-env pk-local-limit-env
-  (err "A 'pk-local-limit-env value can't ensure-binding."))
+  (err "A 'pk-local-limit-env value can't get-binding."))
 
 (rc:ontype pk-env-get (varname) pk-shadowed-env pk-shadowed-env
-  (pk-binding-get:pk-env-ensure-binding self varname))
+  (pk-binding-get:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-get (varname) pk-local-limit-env pk-local-limit-env
-  (pk-binding-get:pk-env-ensure-binding self varname))
+  (pk-binding-get:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-get-meta (varname) pk-shadowed-env pk-shadowed-env
-  (pk-binding-get-meta:pk-env-ensure-binding self varname))
+  (pk-binding-get-meta:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-get-meta (varname)
              pk-local-limit-env pk-local-limit-env
-  (pk-binding-get-meta:pk-env-ensure-binding self varname))
+  (pk-binding-get-meta:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-set (varname new-value)
              pk-shadowed-env pk-shadowed-env
-  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set (pk-env-get-binding self varname) new-value))
 
 (rc:ontype pk-env-set (varname new-value)
              pk-local-limit-env pk-local-limit-env
-  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set (pk-env-get-binding self varname) new-value))
 
 (rc:ontype pk-env-set-meta (varname new-value)
              pk-shadowed-env pk-shadowed-env
-  (pk-binding-set-meta
-    (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set-meta (pk-env-get-binding self varname) new-value))
 
 (rc:ontype pk-env-set-meta (varname new-value)
              pk-local-limit-env pk-local-limit-env
-  (pk-binding-set-meta
-    (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set-meta (pk-env-get-binding self varname) new-value))
 
 
 ; Pick an unlikely-to-write name without being too obscure and without
@@ -355,7 +353,7 @@
     `(pk-demeta ,pk-mangle.self)
       (oi.opos env-lex self)
     `(pk-hyperenv-get _ (',thunk.self))
-    (let binding (pk-hyperenv-ensure-binding dyn-hyperenv self)
+    (let binding (pk-hyperenv-get-binding dyn-hyperenv self)
       `(pk-binding-get (',thunk.binding)))))
 
 (def-pk-optimize-subexpr-meta pk-lambdacalc-var-meta
@@ -363,7 +361,7 @@
     pk-mangle.self
       (oi.opos env-lex self)
     `(pk-hyperenv-get-meta _ (',thunk.self))
-    (let binding (pk-hyperenv-ensure-binding dyn-hyperenv self)
+    (let binding (pk-hyperenv-get-binding dyn-hyperenv self)
       `(pk-binding-get-meta (',thunk.binding)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-set
@@ -374,7 +372,7 @@
       `(assign ,pk-mangle.var (pk-meta result ,val))
         (oi.opos env-lex var)
       `(pk-hyperenv-set _ (',thunk.var) ,val)
-      (let binding (pk-hyperenv-ensure-binding dyn-hyperenv var)
+      (let binding (pk-hyperenv-get-binding dyn-hyperenv var)
         `(pk-binding-set (',thunk.binding) ,val)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-set-meta
@@ -385,7 +383,7 @@
       `(assign ,pk-mangle.var ,val)
         (oi.opos env-lex var)
       `(pk-hyperenv-set-meta _ (',thunk.var) ,val)
-      (let binding (pk-hyperenv-ensure-binding dyn-hyperenv var)
+      (let binding (pk-hyperenv-get-binding dyn-hyperenv var)
         `(pk-binding-set-meta (',thunk.binding) ,val)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-demeta

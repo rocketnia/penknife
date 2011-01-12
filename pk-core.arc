@@ -138,7 +138,7 @@
 ; (pk-env-shadows self varname)          ; rulebook
 ; (pk-env-read-parse-tl self lexid str)  ; rulebook
 ; (pk-env-default-op-parser self)        ; rulebook
-; (pk-env-ensure-binding self varname)   ; rulebook
+; (pk-env-get-binding self varname)      ; rulebook
 ; (pk-env-get self varname)              ; rulebook
 ; (pk-env-get-meta self varname)         ; rulebook
 ; (pk-env-set self varname)              ; rulebook
@@ -154,7 +154,7 @@
 ; (pk-hyperenv-get-env hyperenv lexid)
 ; (pk-hyperenv-traverse hyperenv lexid body)
 ; (pk-hyperenv-default-op-parser hyperenv lexid)
-; (pk-hyperenv-ensure-binding hyperenv hyped-varname)
+; (pk-hyperenv-get-binding hyperenv hyped-varname)
 ; (pk-hyperenv-get hyperenv hyped-varname)
 ; (pk-hyperenv-get-meta hyperenv hyped-varname)
 ; (pk-hyperenv-set hyperenv hyped-varname new-value)
@@ -346,7 +346,7 @@
 ;   rep: A nullary function returning a table mapping bound variable
 ;        names to singleton proper lists containing their bindings.
 ;        The table returned is the same one each time, so that
-;        'pk-env-ensure-binding can mutate new bindings onto it. The
+;        'pk-env-get-binding can mutate new bindings onto it. The
 ;        point of having this be a function, rather than just being
 ;        the table itself, is so that Jarc 17 and Rainbow don't error
 ;        out when trying to display an environment which has an
@@ -886,8 +886,8 @@
 
 (def pk-hyperenv-get-var-forker (static-hyperenv hyped-varname)
   (let lexid pk-hyped-sym-lexid.hyped-varname
-    (aif (!var-forker:rep:pk-binding-get-meta
-           (pk-hyperenv-ensure-binding static-hyperenv hyped-varname))
+    (aif (!var-forker:rep:pk-binding-get-meta:pk-hyperenv-get-binding
+           static-hyperenv hyped-varname)
       (pk-call car.it hyped-varname)
       (let op-parser (pk-hyperenv-default-op-parser
                        static-hyperenv lexid)
@@ -912,7 +912,7 @@
 
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
-(rc:ontype pk-env-ensure-binding (varname)
+(rc:ontype pk-env-get-binding (varname)
              pk-interactive-env pk-interactive-env
   (car:or= (.varname:rep.self)
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
@@ -920,20 +920,19 @@
               "is unbound."))))
 
 (rc:ontype pk-env-get (varname) pk-interactive-env pk-interactive-env
-  (pk-binding-get:pk-env-ensure-binding self varname))
+  (pk-binding-get:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-get-meta (varname)
              pk-interactive-env pk-interactive-env
-  (pk-binding-get-meta:pk-env-ensure-binding self varname))
+  (pk-binding-get-meta:pk-env-get-binding self varname))
 
 (rc:ontype pk-env-set (varname new-value)
              pk-interactive-env pk-interactive-env
-  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set (pk-env-get-binding self varname) new-value))
 
 (rc:ontype pk-env-set-meta (varname new-value)
              pk-interactive-env pk-interactive-env
-  (pk-binding-set-meta
-    (pk-env-ensure-binding self varname) new-value))
+  (pk-binding-set-meta (pk-env-get-binding self varname) new-value))
 
 
 (def pk-hyped-sym-name (hyped-sym)
@@ -987,29 +986,28 @@
     car.it
     (err "No default op parser was found.")))
 
-(def pk-hyperenv-ensure-binding (hyperenv hyped-varname)
+(def pk-hyperenv-get-binding (hyperenv hyped-varname)
   (aif (let (varname . lexid) rep.hyped-varname
          (pk-hyperenv-traverse hyperenv lexid
            [when (pk-env-shadows _ varname)
-             (list:pk-env-ensure-binding _ varname)]))
+             (list:pk-env-get-binding _ varname)]))
     car.it
     (err "A binding couldn't be ensured.")))
 
 (def pk-hyperenv-get (hyperenv hyped-varname)
-  (pk-binding-get:pk-hyperenv-ensure-binding hyperenv hyped-varname))
+  (pk-binding-get:pk-hyperenv-get-binding hyperenv hyped-varname))
 
 (def pk-hyperenv-get-meta (hyperenv hyped-varname)
-  (pk-binding-get-meta:pk-hyperenv-ensure-binding
+  (pk-binding-get-meta:pk-hyperenv-get-binding
     hyperenv hyped-varname))
 
 (def pk-hyperenv-set (hyperenv hyped-varname new-value)
-  (pk-binding-set (pk-hyperenv-ensure-binding hyperenv hyped-varname)
-                  new-value))
+  (pk-binding-set
+    (pk-hyperenv-get-binding hyperenv hyped-varname) new-value))
 
 (def pk-hyperenv-set-meta (hyperenv hyped-varname new-value)
   (pk-binding-set-meta
-    (pk-hyperenv-ensure-binding hyperenv hyped-varname)
-    new-value))
+    (pk-hyperenv-get-binding hyperenv hyped-varname) new-value))
 
 
 (def pk-parse-leaf-from-thunk (lexid static-hyperenv getter)
