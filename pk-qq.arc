@@ -354,7 +354,7 @@
               ; that we don't have to scrape expressions like this.
               hyped-name (rep pk-fork-to-get.op-fork)
               dyn-hyperenv
-                (pk-captured-hyperenv:pk-dyn-hyperenv-get
+                (pk-captured-hyperenv:pk-hyperenv-get
                   static-hyperenv hyped-name)
               generated-lexids
                 (map [list _ (list:cons rep.hyped-name _)]
@@ -432,18 +432,17 @@
                         (map [list _ pk-nometa*] args)))))))))))
 
 
-(pk-dynenv-set-meta pk-replenv* 'tm
-  (pk-wrap-op:pk-mc-parser-for idfn))
+(pk-env-set-meta pk-replenv* 'tm (pk-wrap-op:pk-mc-parser-for idfn))
 
-(pk-dynenv-set-meta pk-replenv* 'tm*
+(pk-env-set-meta pk-replenv* 'tm*
   (pk-wrap-op:pk-mc-rest-parser-for idfn))
 
-(pk-dynenv-set-meta pk-replenv* 'hm
+(pk-env-set-meta pk-replenv* 'hm
   (pk-wrap-op:pk-mc-parser-for [annotate 'pk-lambdacalc-hefty-fn _]))
 
-(pk-dynenv-set-meta pk-replenv* 'hm*
+(pk-env-set-meta pk-replenv* 'hm*
   (pk-wrap-op:pk-mc-rest-parser-for
     [annotate 'pk-lambdacalc-hefty-fn _]))
 
 ; TODO: Stop exposing this.
-(pk-dynenv-set pk-replenv* 'wrap-op pk-wrap-op)
+(pk-env-set pk-replenv* 'wrap-op pk-wrap-op)

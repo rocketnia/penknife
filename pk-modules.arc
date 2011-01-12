@@ -65,17 +65,17 @@
 
 (def pk-mutate-with-module (lexid env str act-on report-error prompt)
   (zap newline-normalizer str)
-  ; NOTE: If 'pk-staticenv-read-parse-tl raises an error while
-  ; reading, rather than while parsing, this could loop infinitely. We
-  ; plan to let the environment support command syntax we can't
-  ; predict, such as multiple-word commands or commands with
-  ; mismatched brackets, so there isn't an obvious way to separate the
-  ; reading phase from the parsing phase.
+  ; NOTE: If 'pk-env-read-parse-tl raises an error while reading,
+  ; rather than while parsing, this could loop infinitely. We plan to
+  ; let the environment support command syntax we can't predict, such
+  ; as multiple-word commands or commands with mismatched brackets, so
+  ; there isn't an obvious way to separate the reading phase from the
+  ; parsing phase.
   (withs (rev-commands nil
           result (pktl act-on report-error
                    (fn ()
                      do.prompt.str  ; Wait for more input.
-                     (whenlet (expr) (pk-staticenv-read-parse-tl
+                     (whenlet (expr) (pk-env-read-parse-tl
                                        env lexid str)
                        (let command
                              (eval

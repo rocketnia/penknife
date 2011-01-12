@@ -52,15 +52,15 @@
 ;
 ; pk-local-limit-env*  ; value of type 'pk-local-limit-env
 ;
-; (pk-staticenv-default-op-parser self)        ; external rulebook
-; (pk-dynenv-shadows self varname)             ; external rulebook
-; (pk-staticenv-read-parse-tl self lexid str)  ; external rulebook
-; (pk-dynenv-ensure-binding self varname)      ; external rulebook
-; (pk-dynenv-get-binding self varname)         ; external rulebook
-; (pk-dynenv-get self varname)                 ; external rulebook
-; (pk-dynenv-get-meta self varname)            ; external rulebook
-; (pk-dynenv-set varname self new-value)       ; external rulebook
-; (pk-dynenv-set-meta self varname new-value)  ; external rulebook
+; (pk-env-shadows self varname)             ; external rulebook
+; (pk-env-read-parse-tl self lexid str)     ; external rulebook
+; (pk-env-default-op-parser self)           ; external rulebook
+; (pk-env-ensure-binding self varname)      ; external rulebook
+; (pk-env-get-binding self varname)         ; external rulebook
+; (pk-env-get self varname)                 ; external rulebook
+; (pk-env-get-meta self varname)            ; external rulebook
+; (pk-env-set varname self new-value)       ; external rulebook
+; (pk-env-set-meta self varname new-value)  ; external rulebook
 ;
 ; (pk-mangle hyped-sym)
 ;
@@ -146,80 +146,76 @@
 (= pk-local-limit-env* (annotate 'pk-local-limit-env nil))
 
 
-(rc:ontype pk-staticenv-default-op-parser ()
-             pk-shadowed-env pk-shadowed-env
-  (pk-staticenv-default-op-parser rep.self.1))
+(rc:ontype pk-env-shadows (varname) pk-shadowed-env pk-shadowed-env
+  (if rep.self.0.varname t (pk-env-shadows rep.self.1 varname)))
 
-(rc:ontype pk-staticenv-default-op-parser ()
+(rc:ontype pk-env-shadows (varname)
              pk-local-limit-env pk-local-limit-env
   nil)
 
-(rc:ontype pk-dynenv-shadows (varname)
+(rc:ontype pk-env-read-parse-tl (lexid str)
              pk-shadowed-env pk-shadowed-env
-  (if rep.self.0.varname t (pk-dynenv-shadows rep.self.1 varname)))
+  (pk-env-read-parse-tl rep.self.1 lexid str))
 
-(rc:ontype pk-dynenv-shadows (varname)
-             pk-local-limit-env pk-local-limit-env
-  nil)
-
-(rc:ontype pk-staticenv-read-parse-tl (lexid str)
-             pk-shadowed-env pk-shadowed-env
-  (pk-staticenv-read-parse-tl rep.self.1 lexid str))
-
-(rc:ontype pk-staticenv-read-parse-tl (lexid str)
+(rc:ontype pk-env-read-parse-tl (lexid str)
              pk-local-limit-env pk-local-limit-env
   (err "A 'pk-local-limit-env value can't read-parse-tl."))
 
-(rc:ontype pk-dynenv-ensure-binding (varname)
-             pk-shadowed-env pk-shadowed-env
-  (aif rep.self.0.varname
-    car.it
-    (pk-dynenv-ensure-binding rep.self.1 varname)))
+(rc:ontype pk-env-default-op-parser () pk-shadowed-env pk-shadowed-env
+  (pk-env-default-op-parser rep.self.1))
 
-(rc:ontype pk-dynenv-ensure-binding (varname)
-             pk-local-limit-env pk-local-limit-env
-  (err "A 'pk-local-limit-env value can't ensure-binding."))
-
-(rc:ontype pk-dynenv-get-binding (varname)
-             pk-shadowed-env pk-shadowed-env
-  (or rep.self.0.varname (pk-dynenv-get-binding rep.self.1 varname)))
-
-(rc:ontype pk-dynenv-get-binding (varname)
+(rc:ontype pk-env-default-op-parser ()
              pk-local-limit-env pk-local-limit-env
   nil)
 
-(rc:ontype pk-dynenv-get (varname) pk-shadowed-env pk-shadowed-env
-  (pk-binding-get:pk-dynenv-ensure-binding self varname))
-
-(rc:ontype pk-dynenv-get (varname)
-             pk-local-limit-env pk-local-limit-env
-  (pk-binding-get:pk-dynenv-ensure-binding self varname))
-
-(rc:ontype pk-dynenv-get-meta (varname)
+(rc:ontype pk-env-ensure-binding (varname)
              pk-shadowed-env pk-shadowed-env
-  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
+  (aif rep.self.0.varname
+    car.it
+    (pk-env-ensure-binding rep.self.1 varname)))
 
-(rc:ontype pk-dynenv-get-meta (varname)
+(rc:ontype pk-env-ensure-binding (varname)
              pk-local-limit-env pk-local-limit-env
-  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
+  (err "A 'pk-local-limit-env value can't ensure-binding."))
 
-(rc:ontype pk-dynenv-set (varname new-value)
+(rc:ontype pk-env-get-binding (varname)
              pk-shadowed-env pk-shadowed-env
-  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
+  (or rep.self.0.varname (pk-env-get-binding rep.self.1 varname)))
 
-(rc:ontype pk-dynenv-set (varname new-value)
+(rc:ontype pk-env-get-binding (varname)
              pk-local-limit-env pk-local-limit-env
-  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
+  nil)
 
-(rc:ontype pk-dynenv-set-meta (varname new-value)
+(rc:ontype pk-env-get (varname) pk-shadowed-env pk-shadowed-env
+  (pk-binding-get:pk-env-ensure-binding self varname))
+
+(rc:ontype pk-env-get (varname) pk-local-limit-env pk-local-limit-env
+  (pk-binding-get:pk-env-ensure-binding self varname))
+
+(rc:ontype pk-env-get-meta (varname) pk-shadowed-env pk-shadowed-env
+  (pk-binding-get-meta:pk-env-ensure-binding self varname))
+
+(rc:ontype pk-env-get-meta (varname)
+             pk-local-limit-env pk-local-limit-env
+  (pk-binding-get-meta:pk-env-ensure-binding self varname))
+
+(rc:ontype pk-env-set (varname new-value)
+             pk-shadowed-env pk-shadowed-env
+  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
+
+(rc:ontype pk-env-set (varname new-value)
+             pk-local-limit-env pk-local-limit-env
+  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
+
+(rc:ontype pk-env-set-meta (varname new-value)
              pk-shadowed-env pk-shadowed-env
   (pk-binding-set-meta
-    (pk-dynenv-ensure-binding self varname) new-value))
+    (pk-env-ensure-binding self varname) new-value))
 
-(rc:ontype pk-dynenv-set-meta (varname new-value)
+(rc:ontype pk-env-set-meta (varname new-value)
              pk-local-limit-env pk-local-limit-env
   (pk-binding-set-meta
-    (pk-dynenv-ensure-binding self varname) new-value))
+    (pk-env-ensure-binding self varname) new-value))
 
 
 ; Pick an unlikely-to-write name without being too obscure and without
@@ -367,16 +363,16 @@
   (if (oi.opos local-lex self)
     `(pk-demeta ,pk-mangle.self)
       (oi.opos env-lex self)
-    `(pk-dyn-hyperenv-get _ (',thunk.self))
-    (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv self)
+    `(pk-hyperenv-get _ (',thunk.self))
+    (let binding (pk-hyperenv-ensure-binding dyn-hyperenv self)
       `(pk-binding-get (',thunk.binding)))))
 
 (def-pk-optimize-subexpr-meta pk-lambdacalc-var-meta
   (if (oi.opos local-lex self)
     pk-mangle.self
       (oi.opos env-lex self)
-    `(pk-dyn-hyperenv-get-meta _ (',thunk.self))
-    (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv self)
+    `(pk-hyperenv-get-meta _ (',thunk.self))
+    (let binding (pk-hyperenv-ensure-binding dyn-hyperenv self)
       `(pk-binding-get-meta (',thunk.binding)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-set
@@ -386,8 +382,8 @@
     (if (oi.opos local-lex var)
       `(assign ,pk-mangle.var (pk-meta result ,val))
         (oi.opos env-lex var)
-      `(pk-dyn-hyperenv-set _ (',thunk.var) ,val)
-      (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv var)
+      `(pk-hyperenv-set _ (',thunk.var) ,val)
+      (let binding (pk-hyperenv-ensure-binding dyn-hyperenv var)
         `(pk-binding-set (',thunk.binding) ,val)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-set-meta
@@ -397,8 +393,8 @@
     (if (oi.opos local-lex var)
       `(assign ,pk-mangle.var ,val)
         (oi.opos env-lex var)
-      `(pk-dyn-hyperenv-set-meta _ (',thunk.var) ,val)
-      (let binding (pk-dyn-hyperenv-ensure-binding dyn-hyperenv var)
+      `(pk-hyperenv-set-meta _ (',thunk.var) ,val)
+      (let binding (pk-hyperenv-ensure-binding dyn-hyperenv var)
         `(pk-binding-set-meta (',thunk.binding) ,val)))))
 
 (def-pk-optimize-subexpr pk-lambdacalc-demeta
@@ -475,7 +471,6 @@
             (map [list _ pk-nometa*] args)))))))
 
 
-(pk-dynenv-set-meta pk-replenv* 'tf pk-wrap-op.pk-thin-fn-parser)
+(pk-env-set-meta pk-replenv* 'tf pk-wrap-op.pk-thin-fn-parser)
 
-(pk-dynenv-set-meta pk-replenv* 'tf*
-  pk-wrap-op.pk-thin-fn-rest-parser)
+(pk-env-set-meta pk-replenv* 'tf* pk-wrap-op.pk-thin-fn-rest-parser)

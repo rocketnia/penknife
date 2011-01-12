@@ -162,7 +162,7 @@
   (pk-parse-literal-from-thunk
     (fn () soup->string-force.body) lexid static-hyperenv))
 
-(pk-dynenv-set-meta pk-replenv* 'q
+(pk-env-set-meta pk-replenv* 'q
   (pk-meta result      idfn
            var-forker  (list:pk-var-forker-from-op
                          pk-stringquote-parser)))
@@ -173,7 +173,7 @@
       (list:eval:read:+ "(fn () " soup->string-force.body ")"))
     (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
-(pk-dynenv-set-meta pk-replenv* 'arc
+(pk-env-set-meta pk-replenv* 'arc
   (pk-meta result      t
            var-forker  (list:pk-var-forker-from-op
                          pk-drop-to-arc-parser)))
@@ -188,7 +188,7 @@
                      "platform.")))
     (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
-(pk-dynenv-set-meta pk-replenv* 'plt
+(pk-env-set-meta pk-replenv* 'plt
   (pk-meta result      (~no plt)      ; NOTE: Jarc dislikes ~~.
            var-forker  (list:pk-var-forker-from-op
                          pk-drop-to-plt-parser)))
@@ -206,7 +206,7 @@
                      "platform.")))
     (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
-(pk-dynenv-set-meta pk-replenv* 'eval-plt
+(pk-env-set-meta pk-replenv* 'eval-plt
   (pk-meta result      (~no plt)           ; NOTE: Jarc dislikes ~~.
            var-forker  (list:pk-var-forker-from-op
                          pk-eval-plt-parser)))
@@ -228,7 +228,7 @@
                      "platform.")))
     (pk-hyperenv-default-op-parser static-hyperenv lexid)))
 
-(pk-dynenv-set-meta pk-replenv* 'js
+(pk-env-set-meta pk-replenv* 'js
   ; NOTE: Jarc dislikes ~~.
   (pk-meta result      (~no pk-jvm-js-engine*)
            var-forker  (list:pk-var-forker-from-op pk-js-parser)))
@@ -312,12 +312,12 @@
               (pk-call call.parse-op
                 op-fork3 body3 lexid3 static-hyperenv3))))))))
 
-(pk-dynenv-set-meta pk-replenv* 'compose
+(pk-env-set-meta pk-replenv* 'compose
   (pk-meta result      pk-compose
            var-forker  (list:pk-var-forker-from-op
                          pk-compose-parser)))
 
-(pk-dynenv-set-meta pk-replenv* ':
+(pk-env-set-meta pk-replenv* ':
   (pk-meta result      (fn args1
                          (fn args2
                            (apply pk-compose (join args1 args2))))
@@ -334,7 +334,7 @@
         (pk-fork-to-set (pk-parse var lexid static-hyperenv)
           (pk-fork-to-get:pk-parse val lexid static-hyperenv))))))
 
-(pk-dynenv-set-meta pk-replenv* '= pk-wrap-op.pk-assign-parser)
+(pk-env-set-meta pk-replenv* '= pk-wrap-op.pk-assign-parser)
 
 
 (def pk-demeta-parser (op-fork body lexid static-hyperenv)
@@ -356,7 +356,7 @@
              op    (pk-hyperenv-default-op-parser
                      static-hyperenv lexid))))))
 
-(pk-dynenv-set-meta pk-replenv* 'meta
+(pk-env-set-meta pk-replenv* 'meta
   (pk-meta result      idfn
            var-forker  (list:pk-var-forker-from-op pk-demeta-parser)))
 
@@ -384,26 +384,26 @@
 
 ; NOTE: Jarc 17 considers (string '|'|) to be "|'|", and Rainbow
 ; considers it to be "||" because it parses '|'| as two expressions.
-(pk-dynenv-set-meta pk-replenv* (sym "'")
+(pk-env-set-meta pk-replenv* (sym "'")
   (pk-meta result      (fn args [apply _ args])
            var-forker  (list:pk-var-forker-from-op
                          pk-infix-inverted-call-parser)))
 
 
-(pk-dynenv-set pk-replenv* 'demo (thunk:prn "This is a demo."))
+(pk-env-set pk-replenv* 'demo (thunk:prn "This is a demo."))
 
-(pk-dynenv-set pk-replenv* '+ +)
+(pk-env-set pk-replenv* '+ +)
 
-(pk-dynenv-set pk-replenv* 'drop (annotate 'pk-fn-meta
-                                   (list:fn ((o code 'goodbye))
-                                     (pk-meta action  (list:fn ())
-                                              quit    list.code))))
+(pk-env-set pk-replenv* 'drop (annotate 'pk-fn-meta
+                                (list:fn ((o code 'goodbye))
+                                  (pk-meta action  (list:fn ())
+                                           quit    list.code))))
 
-(pk-dynenv-set-meta pk-replenv* 'help
+(pk-env-set-meta pk-replenv* 'help
   (pk-meta action (list:thunk:prn "To exit Penknife, use \"[drop]\", "
                                   "without the quotes.")))
 
-(pk-dynenv-set pk-replenv* 'command [annotate 'pk-fn-meta list._])
+(pk-env-set pk-replenv* 'command [annotate 'pk-fn-meta list._])
 
-(pk-dynenv-set pk-replenv* 'apply (fn args
-                                    (apply apply pk-call args)))
+(pk-env-set pk-replenv* 'apply (fn args
+                                 (apply apply pk-call args)))

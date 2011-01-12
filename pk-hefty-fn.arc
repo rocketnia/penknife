@@ -110,7 +110,6 @@
         op-fork body lexid static-hyperenv))))
 
 
-(pk-dynenv-set-meta pk-replenv* 'hf pk-wrap-op.pk-hefty-fn-parser)
+(pk-env-set-meta pk-replenv* 'hf pk-wrap-op.pk-hefty-fn-parser)
 
-(pk-dynenv-set-meta pk-replenv* 'hf*
-  pk-wrap-op.pk-hefty-fn-rest-parser)
+(pk-env-set-meta pk-replenv* 'hf* pk-wrap-op.pk-hefty-fn-rest-parser)

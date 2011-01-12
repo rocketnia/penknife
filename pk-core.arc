@@ -133,34 +133,34 @@
 ; (pk-binding-set-meta self new-value)  ; rulebook
 ;
 ; (pk-make-interactive-env)
-; (pk-static-hyperenv-get-var-forker static-hyperenv hyped-varname)
-; (pk-staticenv-default-op-parser self)        ; rulebook
-; pk-comment-char*                             ; value of type 'char
-; (pk-dynenv-shadows self varname)             ; rulebook
-; (pk-staticenv-read-parse-tl self lexid str)  ; rulebook
-; (pk-dynenv-ensure-binding self varname)      ; rulebook
-; (pk-dynenv-get-binding self varname)         ; rulebook
-; (pk-dynenv-get self varname)                 ; rulebook
-; (pk-dynenv-get-meta self varname)            ; rulebook
-; (pk-dynenv-set self varname)                 ; rulebook
-; (pk-dynenv-set-meta self varname)            ; rulebook
+; (pk-hyperenv-get-var-forker static-hyperenv hyped-varname)
+; pk-comment-char*                       ; value of type 'char
+; (pk-env-shadows self varname)          ; rulebook
+; (pk-env-read-parse-tl self lexid str)  ; rulebook
+; (pk-env-default-op-parser self)        ; rulebook
+; (pk-env-ensure-binding self varname)   ; rulebook
+; (pk-env-get-binding self varname)      ; rulebook
+; (pk-env-get self varname)              ; rulebook
+; (pk-env-get-meta self varname)         ; rulebook
+; (pk-env-set self varname)              ; rulebook
+; (pk-env-set-meta self varname)         ; rulebook
 ;
 ; (pk-hyped-sym-name hyped-sym)
 ; (pk-hyped-sym-lexid hyped-sym)
 ; (rc.oiso2 a b)                  ; external rule
 ;
-; (pk-captures-of self)                                     ; rulebook
+; (pk-captures-of self)                                    ; rulebook
 ; (pk-captured-hyperenv capturer)
 ; (pk-make-hyperenv . args)
 ; (pk-hyperenv-get-env hyperenv lexid)
 ; (pk-hyperenv-traverse hyperenv lexid body)
 ; (pk-hyperenv-default-op-parser hyperenv lexid)
-; (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
-; (pk-dyn-hyperenv-get-binding hyperenv hyped-varname)
-; (pk-dyn-hyperenv-get hyperenv hyped-varname)
-; (pk-dyn-hyperenv-get-meta hyperenv hyped-varname)
-; (pk-dyn-hyperenv-set hyperenv hyped-varname new-value)
-; (pk-dyn-hyperenv-set-meta hyperenv hyped-varname new-value)
+; (pk-hyperenv-ensure-binding hyperenv hyped-varname)
+; (pk-hyperenv-get-binding hyperenv hyped-varname)
+; (pk-hyperenv-get hyperenv hyped-varname)
+; (pk-hyperenv-get-meta hyperenv hyped-varname)
+; (pk-hyperenv-set hyperenv hyped-varname new-value)
+; (pk-hyperenv-set-meta hyperenv hyped-varname new-value)
 ;
 ; (pk-parse-leaf-from-thunk lexid static-hyperenv getter)
 ; (pk-parse-literal-from-thunk value-parser lexid static-hyperenv)
@@ -348,10 +348,10 @@
 ;   rep: A nullary function returning a table mapping bound variable
 ;        names to singleton proper lists containing their bindings.
 ;        The table returned is the same one each time, so that
-;        'pk-dynenv-ensure-binding can mutate new bindings onto it.
-;        The point of having this be a function, rather than just
-;        being the table itself, is so that Jarc 17 and Rainbow don't
-;        error out when trying to display an environment which has an
+;        'pk-env-ensure-binding can mutate new bindings onto it. The
+;        point of having this be a function, rather than just being
+;        the table itself, is so that Jarc 17 and Rainbow don't error
+;        out when trying to display an environment which has an
 ;        element that refers back to the same environment.
 ;
 ; pk-captures
@@ -886,62 +886,60 @@
 (def pk-make-interactive-env ()
   (let rep (table) (annotate 'pk-interactive-env thunk.rep)))
 
-(def pk-static-hyperenv-get-var-forker (static-hyperenv hyped-varname)
+(def pk-hyperenv-get-var-forker (static-hyperenv hyped-varname)
   (let lexid pk-hyped-sym-lexid.hyped-varname
-    (aif (aand (pk-dyn-hyperenv-get-binding
-                 static-hyperenv hyped-varname)
+    (aif (aand (pk-hyperenv-get-binding static-hyperenv hyped-varname)
                (!var-forker:rep:pk-binding-get-meta car.it))
       (pk-call car.it hyped-varname)
       (let op-parser (pk-hyperenv-default-op-parser
                        static-hyperenv lexid)
         (pk-call pk-var-forker-from-op.op-parser hyped-varname)))))
 
-(rc:ontype pk-staticenv-default-op-parser ()
-             pk-interactive-env pk-interactive-env
-  list.pk-function-call-parser)
-
 (= pk-comment-char* #\;)
 
-(rc:ontype pk-dynenv-shadows (varname)
+(rc:ontype pk-env-shadows (varname)
              pk-interactive-env pk-interactive-env
   t)
 
 ; TODO: Allow read behavior customization among environments.
-(rc:ontype pk-staticenv-read-parse-tl (lexid str)
+(rc:ontype pk-env-read-parse-tl (lexid str)
              pk-interactive-env pk-interactive-env
   (awhen (start-word&finish-bracket-word:comment-ignorer
            str pk-comment-char*)
     (list:pk-parse-tl it lexid (pk-make-hyperenv lexid self))))
 
+(rc:ontype pk-env-default-op-parser ()
+             pk-interactive-env pk-interactive-env
+  list.pk-function-call-parser)
+
 ; TODO: Figure out how best to make this thread-safe.
 ; TODO: See if the name ought to be baked into the metadata this way.
-(rc:ontype pk-dynenv-ensure-binding (varname)
+(rc:ontype pk-env-ensure-binding (varname)
              pk-interactive-env pk-interactive-env
   (car:or= (.varname:rep.self)
     (list:pk-make-ad-hoc-binding-meta:pk-meta error
       (list:+ "The variable \"" (or varname "nil") "\" "
               "is unbound."))))
 
-(rc:ontype pk-dynenv-get-binding (varname)
+(rc:ontype pk-env-get-binding (varname)
              pk-interactive-env pk-interactive-env
   (.varname:rep.self))
 
-(rc:ontype pk-dynenv-get (varname)
-             pk-interactive-env pk-interactive-env
-  (pk-binding-get:pk-dynenv-ensure-binding self varname))
+(rc:ontype pk-env-get (varname) pk-interactive-env pk-interactive-env
+  (pk-binding-get:pk-env-ensure-binding self varname))
 
-(rc:ontype pk-dynenv-get-meta (varname)
+(rc:ontype pk-env-get-meta (varname)
              pk-interactive-env pk-interactive-env
-  (pk-binding-get-meta:pk-dynenv-ensure-binding self varname))
+  (pk-binding-get-meta:pk-env-ensure-binding self varname))
 
-(rc:ontype pk-dynenv-set (varname new-value)
+(rc:ontype pk-env-set (varname new-value)
              pk-interactive-env pk-interactive-env
-  (pk-binding-set (pk-dynenv-ensure-binding self varname) new-value))
+  (pk-binding-set (pk-env-ensure-binding self varname) new-value))
 
-(rc:ontype pk-dynenv-set-meta (varname new-value)
+(rc:ontype pk-env-set-meta (varname new-value)
              pk-interactive-env pk-interactive-env
   (pk-binding-set-meta
-    (pk-dynenv-ensure-binding self varname) new-value))
+    (pk-env-ensure-binding self varname) new-value))
 
 
 (def pk-hyped-sym-name (hyped-sym)
@@ -986,46 +984,43 @@
       ; NOTE: Jarc doesn't like (let ((a . b) . c) d ...).
       (whenlet (capturevar . parent) (acons&idfn lexid)
         (pk-hyperenv-traverse
-          (pk-captured-hyperenv:pk-dyn-hyperenv-get
+          (pk-captured-hyperenv:pk-hyperenv-get
             hyperenv (annotate 'pk-hyped-sym capturevar))
           parent body))))
 
 (def pk-hyperenv-default-op-parser (hyperenv lexid)
-  (aif (pk-hyperenv-traverse hyperenv lexid
-         pk-staticenv-default-op-parser)
+  (aif (pk-hyperenv-traverse hyperenv lexid pk-env-default-op-parser)
     car.it
     (err "No default op parser was found.")))
 
-(def pk-dyn-hyperenv-ensure-binding (hyperenv hyped-varname)
+(def pk-hyperenv-ensure-binding (hyperenv hyped-varname)
   (aif (let (varname . lexid) rep.hyped-varname
          (pk-hyperenv-traverse hyperenv lexid
-           [when (pk-dynenv-shadows _ varname)
-             (list:pk-dynenv-ensure-binding _ varname)]))
+           [when (pk-env-shadows _ varname)
+             (list:pk-env-ensure-binding _ varname)]))
     car.it
     (err "A binding couldn't be ensured.")))
 
-(def pk-dyn-hyperenv-get-binding (hyperenv hyped-varname)
+(def pk-hyperenv-get-binding (hyperenv hyped-varname)
   (let (varname . lexid) rep.hyped-varname
     (pk-hyperenv-traverse hyperenv lexid
-      [when (pk-dynenv-shadows _ varname)
-        (pk-dynenv-get-binding _ varname)])))
+      [when (pk-env-shadows _ varname)
+        (pk-env-get-binding _ varname)])))
 
-(def pk-dyn-hyperenv-get (hyperenv hyped-varname)
-  (pk-binding-get:pk-dyn-hyperenv-ensure-binding
+(def pk-hyperenv-get (hyperenv hyped-varname)
+  (pk-binding-get:pk-hyperenv-ensure-binding hyperenv hyped-varname))
+
+(def pk-hyperenv-get-meta (hyperenv hyped-varname)
+  (pk-binding-get-meta:pk-hyperenv-ensure-binding
     hyperenv hyped-varname))
 
-(def pk-dyn-hyperenv-get-meta (hyperenv hyped-varname)
-  (pk-binding-get-meta:pk-dyn-hyperenv-ensure-binding
-    hyperenv hyped-varname))
+(def pk-hyperenv-set (hyperenv hyped-varname new-value)
+  (pk-binding-set (pk-hyperenv-ensure-binding hyperenv hyped-varname)
+                  new-value))
 
-(def pk-dyn-hyperenv-set (hyperenv hyped-varname new-value)
-  (pk-binding-set
-    (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
-    new-value))
-
-(def pk-dyn-hyperenv-set-meta (hyperenv hyped-varname new-value)
+(def pk-hyperenv-set-meta (hyperenv hyped-varname new-value)
   (pk-binding-set-meta
-    (pk-dyn-hyperenv-ensure-binding hyperenv hyped-varname)
+    (pk-hyperenv-ensure-binding hyperenv hyped-varname)
     new-value))
 
 
@@ -1125,7 +1120,7 @@
 
 (mr:rule pk-parse (soup lexid static-hyperenv) identifier
   (iflet hyped-sym (pk-soup-identifier soup lexid)
-    (pk-static-hyperenv-get-var-forker static-hyperenv hyped-sym)
+    (pk-hyperenv-get-var-forker static-hyperenv hyped-sym)
     (do.fail "The word wasn't an identifier.")))
 
 (mr:rule pk-parse (soup lexid static-hyperenv) infix
@@ -1257,17 +1252,17 @@
   car.self)
 
 (def-pk-eval pk-lambdacalc-var
-  (pk-dyn-hyperenv-get dyn-hyperenv self))
+  (pk-hyperenv-get dyn-hyperenv self))
 
 (def-pk-eval-meta pk-lambdacalc-var-meta
-  (pk-dyn-hyperenv-get-meta dyn-hyperenv self))
+  (pk-hyperenv-get-meta dyn-hyperenv self))
 
 (def-pk-eval pk-lambdacalc-set
-  (pk-dyn-hyperenv-set
+  (pk-hyperenv-set
     dyn-hyperenv self.0 (pk-eval self.1 lexid dyn-hyperenv)))
 
 (def-pk-eval pk-lambdacalc-set-meta
-  (pk-dyn-hyperenv-set-meta
+  (pk-hyperenv-set-meta
     dyn-hyperenv self.0 (pk-eval self.1 lexid dyn-hyperenv)))
 
 (def-pk-eval pk-lambdacalc-demeta
@@ -1319,17 +1314,17 @@
 
 (def pktl-stream (env str act-on report-error prompt)
   (zap newline-normalizer str)
-  ; NOTE: If 'pk-staticenv-read-parse-tl raises an error while
-  ; reading, rather than while parsing, this could loop infinitely. We
-  ; plan to let the environment support command syntax we can't
-  ; predict, such as multiple-word commands or commands with
-  ; mismatched brackets, so there isn't an obvious way to separate the
-  ; reading phase from the parsing phase.
+  ; NOTE: If 'pk-env-read-parse-tl raises an error while reading,
+  ; rather than while parsing, this could loop infinitely. We plan to
+  ; let the environment support command syntax we can't predict, such
+  ; as multiple-word commands or commands with mismatched brackets, so
+  ; there isn't an obvious way to separate the reading phase from the
+  ; parsing phase.
   (let hyperenv (pk-make-hyperenv nil env)
     (pktl act-on report-error
       (fn ()
         do.prompt.str     ; Wait for more input.
-        (whenlet (expr) (pk-staticenv-read-parse-tl env nil str)
+        (whenlet (expr) (pk-env-read-parse-tl env nil str)
           (list:pk-eval-meta expr nil hyperenv))))))
 
 ; NOTE: Rainbow's profiler doesn't like function calls in optional
