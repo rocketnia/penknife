@@ -1,0 +1,805 @@
+; Penknife generic utilities.
+;
+; TODO: Build the rest of the language to support these. Specifically,
+; these are the missing pieces:
+;
+;   form operators:
+;   failfn failfn*
+;   call-using
+;   this-lexid this-hyperenv plainqq
+;   = : s
+;
+;   functions:
+;   make-mc hype-text make-capture-lexid
+;   rb-core-call core-call core-set-call
+;   wrap unwrap
+;   fn-ifdecap cons
+;   fn-ifexception throw
+;   make-rulebook add-rule
+;   local-token token
+;   core-is fn-ifword
+;
+;   other values:
+;   t
+;
+;;;;;;;;;;----------;;;;;;;;;;----------;;;;;;;;;;----------;;;;;;;;;;
+
+
+
+; =====  Abstraction  =====
+;
+; depends on: = make-mc this-hyperenv failfn core-call failfn*
+; hype-text make-capture-lexid this-lexid plainqq
+
+
+[= idfn [failfn fail [result] result]]
+
+[= . [make-mc [this-hyperenv]
+       [failfn fail [mcvar mclexid body]
+         [core-call idfn fail [hype-text mclexid body]]]]]
+
+
+[= leak [make-mc this-hyperenv.
+          [failfn fail [mcvar mclexid quasitext]
+            [hype-text [make-capture-lexid mcvar this-lexid.]
+              plainqq.[hype-text \,[hype-text mclexid plainqq.mclexid]
+                        plainqq[\,quasitext]]]]]]
+
+[= qq [make-mc this-hyperenv.
+        [failfn fail [mcvar mclexid quasitext]
+          [hype-text [make-capture-lexid mcvar this-lexid.]
+            plainqq.[hype-text
+                      [make-capture-lexid \,leak.mcvar
+                        \,leak.[\,[hype-text [make-capture-lexid
+                                               mcvar this-lexid.]
+                                    plainqq.this-lexid]]]
+                      plainqq[\,quasitext]]]]]]
+
+
+[= mac*
+   [make-mc this-hyperenv.
+     [failfn fail [mcvar mclexid body]
+       [core-call
+         [failfn* fail [name args rest] body
+           qq.[= \,name
+                 [make-mc [\,leak.this-hyperenv]
+                   [failfn
+                       fail [\,leak.mcvar \,leak.mclexid body]
+                     [core-call [failfn* \,leak.fail \,args \,rest
+                                  \,body]
+                       fail [hype-text \,leak.mclexid body]]]]]]
+         fail [hype-text mclexid body]]]]]
+
+[mac* mac [name args] body
+  qq.[= \,name
+        [make-mc [\,leak.this-hyperenv]
+          [failfn fail [\,leak.mcvar \,leak.mclexid body]
+            [core-call [failfn \,leak.fail \,args \,body] fail
+              [hype-text \,leak.mclexid body]]]]]]
+
+[mac* failfun* [name fail args rest] body
+  qq.[= \,name [failfn* \,fail \,args \,rest \,body]]]
+
+[mac* failfun [name fail args] body
+  qq.[= \,name [failfn \,fail \,args \,body]]]
+
+[mac* fn* [args rest] body
+  qq.[failfn* fail \,args \,rest \,body]]
+
+[mac* fn [args] body
+  qq.[failfn fail \,args \,body]]
+
+[mac* fun* [name args rest] body
+  qq.[failfun* \,name \,leak.fail \,args \,rest \,body]]
+
+[mac* fun [name args] body
+  qq.[failfun \,name \,leak.fail \,args \,body]]
+
+
+; 0, 1, 2, infinity
+
+[mac* thunk [] body
+  qq.[fn [] \,body]]
+
+[mac* itfn [] body
+  qq.[fn [\,leak.it] \,body]]
+
+[mac* abfn [] body
+  qq.[fn [\,leak.a \,leak.b] \,body]]
+
+[mac* themfn [] body
+  qq.[fn* [] \,leak.them \,body]]
+
+
+
+; =====  Miscellaneous  =====
+;
+; depends on: = . fun : mac* fn thunk
+
+
+[mac* do [] body
+  qq.[[thunk \,body]]]
+
+[mac* let [var val] body
+  qq.[[fn [\,var] \,body] \,val]]
+
+
+[mac* ret [var val] body
+  qq.[let \,var \,val
+       \,body
+       \,var]]
+
+[mac* do1 [result] body
+  qq.[ret result \,result \,body]]
+
+
+[mac* named [name] body
+  qq.[let \,name f
+       [= \,name [do \,body]]]]
+
+[mac* selfish [] body
+  qq.[named \,leak.self \,body]]
+
+
+; Here's a more straightforward (but possibly less debug-friendly)
+; implementation of the following:
+;
+;   [mac* named-let [name var init] body
+;     qq.[[named \,name [fn [\,var] \,body]] \,init]]
+
+[fun fn-named-let [init body]
+  [get.init:selfish:itfn:body self it]]
+
+[mac* named-let [name var init] body
+  qq.[fn-named-let \,init [fn [\,name \,var] \,body]]]
+
+[mac* nextlet [var init] body
+  qq.[named-let \,leak.next \,var \,init \,body]]
+
+
+[= f do.]
+
+
+; =====  Invocation  =====
+;
+; depends on: mac* . apply fn fn* local-token : s fun wrap unwrap
+; thunk rule core-call fun* failfn mac itfn fn-ifdecap abfn cons
+; call-using
+
+
+; These are used as syntax before we define the things they expand to
+; depend on.
+
+[mac parsedcall [call]
+  qq.[call-using list \,call]]
+
+[mac failcall [func call]
+  qq.[apply fn-failcall \,func parsedcall.\,call]]
+
+[mac rely [call]
+  qq.[failcall \,leak.fail \,call]]
+
+
+[fun* list [] args
+  args]
+
+[= nil list.]
+
+[fun unbend [seq]
+  [core-call fn-ifdecap fail
+    [list seq
+      [fn [first rest]
+        [fn-ifdecap rest [abfn:cons first unbend.rest] thunk.first]]
+      thunk:fail.s[The list to unbend is empty.]]]]
+
+[fun* call [func] args
+  [core-call core-call fail [list func fail args]]]
+
+[fun* apply [func] args
+  [core-call core-call fail
+    [list func fail [core-call unbend fail list.args]]]]
+
+
+[fun* fn-failcall [inner-fail func] args
+  [core-call func inner-fail args]]
+
+[mac* failsafe [call] body
+  qq.[failcall [itfn \,body] \,call]]
+
+
+[fun* get [] args
+  [failfn fail [func]
+    [rely:apply func args]]]
+
+
+[= token-t-late local-token:s.type/late]
+
+[fun wrap-late [getter]
+  [wrap token-t-late getter]]
+
+[fun unwrap-late [late]
+  [rely:unwrap token-t-late late]]
+
+; TODO: Well drat, late doesn't preserve arity, nor should it.
+[mac* late [] body
+  qq.[wrap-late:thunk \,body]]
+
+
+[mac* letlist [vars val] body
+  qq.[apply [fn \,vars \,body] \,val]]
+
+[mac* letlist* [vars rest val] body
+  qq.[apply [fn* \,vars \,rest \,body] \,val]]
+
+
+; =====  Extension  =====
+;
+; depends on: core-set-call failcall rely : unwrap-late . rb-core-call
+; core-call mac* do add-rule late failfun* failfun mac = make-rulebook
+; s
+
+
+; TODO: What if the name is something like "a.b"?
+[mac rulebook [name]
+  qq.[= \,name make-rulebook:s.\,name]]
+
+
+[mac* rule* [rulebook parms rest name] body
+  qq.[do [add-rule \,rulebook late.\,name]
+         [failfun* \,name \,leak.fail \,parms \,rest
+           \,body]]]
+
+[mac* rule [rulebook parms name] body
+  qq.[do [add-rule \,rulebook late.\,name]
+         [failfun \,name \,leak.fail \,parms
+           \,body]]]
+
+
+[rule rb-core-call [func inner-fail args] rb-core-call/late
+  [failcall inner-fail
+    [core-call rely:unwrap-late.func. inner-fail args]]]
+
+[rule core-set-call [func inner-fail args newcomer] core-set-call/late
+  [failcall inner-fail
+    [core-set-call rely:unwrap-late.func. inner-fail args newcomer]]]
+
+
+
+; =====  Branching  =====
+;
+; depends on: mac* . : fn fun let token itfn throw wrap list unwrap
+; letlist do local-token s fn-ifexception elsefn t f failfn rely
+; failcall fn-ifdecap thunk core-is
+
+
+[mac* elsefn [] body
+  qq.[fn-ifword \,body [fn [first rest] qq.[thunk:\,first \,rest]]
+                       [thunk qq.[thunk f]]]]
+
+
+[mac* ifword [self first rest then] elses
+  qq.[fn-ifword \,self [fn [\,first \,rest] \,then] [elsefn \,elses]]]
+
+
+[fun fn-ifis [a b then else]
+  [core-is a b then else].]
+
+[mac* ifis [a b then] elses
+  qq.[fn-ifis \,a \,b thunk.\,then [elsefn \,elses]]]
+
+
+[fun fn-if [condition then else]
+  [fn-ifis f condition else then]]
+
+[mac* if [condition then] elses
+  qq.[fn-if \,condition thunk.\,then [elsefn \,elses]]]
+
+
+[fun fn-iflet [var condition then else]
+  [if condition
+    then.condition
+   do else.]]
+
+[mac* iflet [var condition then] elses
+  qq.[fn-iflet \,condition [fn [\,var] \,then] [elsefn \,elses]]]
+
+[mac* itif [condition then] elses
+  qq.[iflet \,leak.it \,condition \,elses]]
+
+[mac* whenlet [var condition] body
+  qq.[iflet \,var \,condition [do \,body]]]
+
+[mac* itwhen [condition] body
+  qq.[whenlet \,leak.it \,condition \,body]]
+
+
+[mac* unless [condition] body
+  qq.[if \,condition
+       f
+      do \,body]]
+
+
+[mac* ifdecap [first rest self then] elses
+  qq.[fn-ifdecap \,self [fn [\,first \,rest] \,then]
+                        [elsefn \,elses]]]
+
+
+[fun fn-ifsuccess [call then else]
+  [failcall else [failfn fail [] then:rely:call.].]]
+
+[mac* ifsuccess [success failure call then] elses
+  qq.[fn-ifsuccess [failfn fail [] rely.\,call]
+                   [fn [\,success] \,then]
+                   [fn [\,failure] [elsefn \,elses].]]]
+
+[mac* itifsuccess [call then] elses
+  qq.[ifsuccess \,leak.it \,leak.it \,call \,then \,elses]]
+
+
+[mac* and [] body
+  [ifword first rest body
+    [ifword second rest rest
+      qq.[if \,first
+           [and \,second \,rest]]
+      first]
+   do qq.t]]
+
+[mac* or [] body
+  [ifword first rest body
+    qq.[itif \,first
+         it
+        or \,body]
+   do qq.f]]
+
+
+[mac* andlet [var] body
+  [ifword first rest body
+    [ifword second rest rest
+      qq.[iflet \,var \,first
+           [andlet \,var \,second \,rest]]
+      first]
+   do qq.t]]
+
+[mac* itand [] body
+  qq.[andlet \,leak.it \,body]]
+
+
+[mac* ifexception [exception success main then] elses
+  qq.[fn-ifexception thunk.\,main [fn [\,exception] \,then]
+                                  [fn [\,success] [elsefn \,elses].]]]
+
+[mac* whenexception [var main] body
+  qq.[ifexception \,var ignored \,main [do \,body]]]
+
+[mac* itwhenexception [main] body
+  qq.[whenexception \,leak.it \,main \,body]]
+
+
+; TODO: Here's a much easier implementation. Figure out whether it's
+; worth it to have failure escape continuations be different from
+; others.
+;
+;  [fun fn-point [body]
+;    [itifsuccess [failfn return [] body.return].
+;      it
+;     do it]]
+
+[= token-t-continuation-escape local-token:s.type/continuation-escape]
+
+[fun fn-point [body]
+  [let ce-token token.
+    [itwhenexception [body:itfn:throw:wrap
+                       token-t-continuation-escape [list ce-token it]]
+      [ifsuccess
+          success failure [unwrap token-t-continuation-escape it]
+        [letlist [its-ce-token its-value] success
+          [ifis ce-token its-ce-token
+            its-value
+           do throw.it]]
+       do throw.it]]]]
+
+[mac* point [var] body
+  qq.[fn-point:fn [\,var] \,body]]
+
+[mac* returning [] body
+  qq.[point \,leak.return \,body]]
+
+
+
+; =====  Comparison  =====
+;
+; depends on: mac* . let nextlet ifword if do f fun failfn failsafe
+; core-call list fun* ifdecap and or : t rulebook ifis
+
+
+[fun* is [] args
+  [ifdecap first rest args
+    [nextlet it rest
+      [ifdecap arg rest it
+        [ifis first arg next.rest]
+       do t]]
+   do t]]
+
+[fun no [x]
+  [is f x]]
+
+
+; TODO: Figure out what to do about hashing.
+; TODO: Figure out what to do about recursive data structures.
+
+rulebook.rb-iso
+
+[fun* iso [] args
+  [ifdecap first rest args
+    [nextlet it rest
+      [ifdecap arg rest it
+        [and [or [is first arg] [failsafe:rb-iso first arg]]
+             next.rest]
+       do t]]
+   do t]]
+
+
+[fun testify [self]
+  [failfn fail-test [it]
+    [failsafe [core-call self fail-test list.it] [iso self it]]]]
+
+
+[mac* caselet [compare var val] cases
+  qq.[let compare \,compare
+       [let \,var \,val
+         \,[nextlet it cases
+             [ifword first rest it
+               [ifword then rest rest
+                 qq.[if [compare \,first \,var]
+                      \,then
+                     do \,next.rest]
+                do first]
+              do qq.f]]]]]
+
+[mac* case [compare val] cases
+  qq.[caselet \,compare ignored \,val \,cases]]
+
+
+
+; =====  Iteration  =====
+;
+; depends on: rule rely : ifdecap cons . nil nextlet mac* fn rulebook
+; unwrap mac fn-ifdecap fun wrap local-token s itif do returning
+; elsefn f let no itfn testify thunk if itwhen or
+
+
+[fun fn-til [condition body]
+  [or condition.
+    [do body.
+        [fn-til condition body]]]]
+
+[mac* til [condition] body
+  qq.[fn-til thunk.\,condition thunk[\,body]]]
+
+
+[fun fn-dotil [body]
+  [or body. fn-dotil.body]]
+
+[mac* dotil [] body
+  qq.[fn-dotil:thunk \,body]]
+
+
+[fun fn-whilet [condition body]
+  [itwhen condition.
+    body.it
+    [fn-whilet condition body]]]
+
+[mac* whilet [var condition] body
+  qq.[fn-whilet thunk.\,condition [fn [\,var] \,body]]]
+
+[mac* itwhile [condition] body
+  qq.[whilet \,leak.it \,condition \,body]]
+
+
+[fun fn-while [condition body]
+  [whilet ignored condition. body.]]
+
+[mac* while [condition] body
+  qq.[fn-while thunk.\,condition thunk[\,body]]]
+
+
+[fun fn-dowhile [body]
+  [if body. fn-dowhile.body]]
+
+[mac* dowhile [] body
+  qq.[fn-dowhile:thunk \,body]]
+
+
+rulebook.rb-ifany
+
+[fun fn-ifany [self test then else]
+  [rely:rb-ifany self testify.test then else]]
+
+[mac* ifany [elem self var test then] elses
+  qq.[fn-ifany \,self [fn [\,elem] \,test]
+                      [fn [\,elem \,var] \,then]
+                      [elsefn \,elses]]]
+
+
+[fun fn-any [self test]
+  [let test testify.test
+    [rely:ifany elem self
+                it test.elem
+      it]]]
+
+[mac* any [var self] body
+  qq.[fn-any self [fn [\,var] \,body]]]
+
+
+rulebook.fn-ifanykey
+
+[mac* ifanykey [key val self var condition then] elses
+  qq.[fn-ifanykey \,self [fn [\,key \,val] \,condition]
+                         [fn [\,key \,val \,var] \,then]
+                         [elsefn \,elses]]]
+
+
+[fun fn-anykey [self condition]
+  [rely:ifanykey key val self
+                 it [condition key val]
+    it]]
+
+[mac* anykey [key val self] body
+  qq.[fn-anykey self [fn [\,key \,val] \,body]]]
+
+
+[rule rb-ifany [self test then else] rb-ifany/ifanykey
+  [rely:ifanykey key val self
+                 it test.val
+    [then val it]
+   do else.]]
+
+
+[fun fn-allkey [self condition]
+  [no:rely:fn-anykey self itfn:no:condition.it]]
+
+[mac* fn-allkey [key val self] body
+  qq.[fn-allkey self [fn [\,key \,val] \,body]]]
+
+
+[fun fn-all [self test]
+  [let test testify.test
+    [no:rely:fn-any self itfn:no:test.it]]]
+
+[mac* all [var self] body
+  qq.[fn-all self [fn [\,var] \,body]]]
+
+
+[fun fn-poskey [self condition]
+  [rely:ifanykey key val self
+                 it [condition key val]
+    key]]
+
+[mac* poskey [key val self] body
+  qq.[fn-poskey \,self [fn [\,key \,val] \,body]]]
+
+
+[fun fn-pos [self test]
+  [let test testify.test
+    [rely:poskey key val self test.val]]]
+
+[mac* pos [val self] body
+  qq.[fn-pos \,self [fn [\,val] \,body]]]
+
+
+[fun fn-findkey [self condition]
+  [rely:ifanykey key val self
+                 it [condition key val]
+    val]]
+
+[mac* findkey [key val self] body
+  qq.[fn-findkey \,self [fn [\,key \,val] \,body]]]
+
+
+[fun fn-find [self test]
+  [let test testify.test
+    [rely:ifany elem self
+                it test.elem
+      elem]]]
+
+[mac* find [val self] body
+  qq.[fn-find \,self [fn [\,val] \,body]]]
+
+
+[fun fn-eachkey [self body]
+  [rely:anykey key val self
+    [body key val]
+    f]]
+
+[mac* eachkey [key val self] body
+  qq.[fn-eachkey \,self [fn [\,key \,val] \,body]]]
+
+
+[fun fn-each [self body]
+  [rely:any elem self
+    body.elem
+    f]]
+
+[mac each [var self] body
+  qq.[fn-each \,self [fn [\,var] \,body]]]
+
+
+rulebook.fn-keydecap-erism
+
+[mac* keydecap-erism [var val] body
+  qq.[fn-keydecap-erism \,val [fn [\,var] \,body]]]
+
+rulebook.keydecap-erify
+
+[rule keydecap-erify [x] keydecap-erify/keydecap-erism
+  [returning:rely:fn-keydecap-erism x return]]
+
+rulebook.fn-ifkeydecap
+
+[mac* ifkeydecap [key val self then] elses
+  qq.[fn-ifkeydecap \,self [fn [\,key \,val] \,then]
+                           [elsefn \,elses]]]
+
+[rule fn-ifanykey [iterable condition then else]
+        fn-ifanykey/keydecap-erify
+  [nextlet it rely:keydecap-erify.iterable
+    [ifkeydecap k v rest it
+      [itif [condition k v]
+        [then k v it]
+       do next.rest]
+     do else.]]]
+
+
+rulebook.fn-decap-erism
+
+[mac* decap-erism [var val] body
+  qq.[fn-decap-erism \,val [fn [\,var] \,body]]]
+
+rulebook.decap-erify
+
+[rule decap-erify [x] decap-erify/decap-erism
+  [returning:rely:fn-decap-erism x return]]
+
+[rule rb-ifany [iterable test then else] rb-ifany/decap-erify
+  [nextlet it rely:decap-erify.iterable
+    [ifdecap first rest it
+      [itif test.first
+        [then first it]
+       do next.rest]
+     do else.]]]
+
+
+rulebook.keycons
+
+
+[= token-t-keydecap-er local-token:s.type/keydecap-er]
+
+[fun fn-keydecap-er [body]
+  [wrap token-t-keydecap-er body]
+
+[mac* keydecap-er [then else] body
+  qq.[fn-keydecap-er:fn [\,then \,else] \,body]]
+
+[rule fn-ifkeydecap [self then else] fn-ifkeydecap/keydecap-er
+  [[rely:unwrap token-t-keydecap-er] then else]]
+
+[mac lazykeycons [k v rest]
+  qq.[keydecap-er then else [then \,k \,v \,rest]]]
+
+[rule keycons [k v rest] keycons/keydecap-er
+  [rely:unwrap token-t-keydecap-er self]
+  [lazykeycons k v rest]]
+
+[rule fn-keydecap-erism [self body] fn-keydecap-erism/keydecap-er
+  [rely:unwrap token-t-keydecap-er self]
+  body.self]
+
+
+[= token-t-decap-er local-token:s.type/decap-er]
+
+[fun fn-decap-er [body]
+  [wrap token-t-decap-er body]
+
+[mac* decap-er [then else] body
+  qq.[fn-decap-er:fn [\,then \,else] \,body]]
+
+[rule fn-ifdecap [self then else] fn-ifdecap/decap-er
+  [[rely:unwrap token-t-decap-er] then else]]
+
+[mac lazycons [first rest]
+  qq.[decap-er then else [then \,first \,rest]]]
+
+[rule cons [first rest] cons/decap-er
+  [rely:unwrap token-t-decap-er self]
+  [lazycons first rest]]
+
+[rule fn-decap-erism [self body] fn-decap-erism/decap-er
+  [rely:unwrap token-t-decap-er self]
+  body.self]
+
+
+rulebook.fn-map
+
+[mac* map [var self] body
+  qq.[fn-map \,self [fn [\,var] \,body]]]
+
+[rule fn-map [self body] fn-map/decap-erism
+  [decap-erism self self
+    [nextlet self self
+      [ifdecap first rest self
+        [lazycons body.first next.rest]]]]]
+
+
+rulebook.eager
+
+; TODO: Implement fn-ifkeydecap for argument lists like nil.
+; TODO: Implement eager for things that are already eager, like lists.
+[rule eager [self] eager/keydecap-er
+  [rely:ifkeydecap k v rest self
+    [keycons k v eager.rest]
+    nil]]
+
+[rule eager [self] eager/decap-er
+  [rely:ifdecap first rest self
+    [cons first eager.rest]
+    nil]]
+
+
+
+; =====  Accumulation  =====
+;
+; depends on: mac* . fn fun apply + eager : fn-map rule let rely
+; decap-erify nextlet decap-er ifdecap fun* rulebook do each = rule*
+
+
+rulebook.+
+
+[rule + [result]
+  result]
+
+
+rulebook.binary+
+
+[rule* + [a b] rest
+  [apply + [rely:binary+ a b] rest]]
+
+
+rulebook.sent
+
+rulebook.sentall
+
+[rule sentall [self elems] sentall/fn-each
+  [rely:each elem elems
+    [= self [sent self elem]]]
+  self]
+
+[rule sentall [self elems] sentall/fn-ifdecap
+  [rely:ifdecap first rest elems
+    [sentall [sent self first] rest]
+   do self]]
+
+
+rulebook.inside
+
+
+rulebook.+chute
+
+[fun* + [first] rest
+  [inside:sentall rely:+chute.first rest]]
+
+
+[rule binary+ [a b] binary+/decap-erify
+  [let a rely:decap-erify.a
+    [let b rely:decap-erify.b
+      [nextlet a a
+        [decap-er then else
+          [ifdecap first rest a
+            [then first next.rest]
+            b]]]]]]
+
+
+[fun fn-map+ [self func]
+  [apply + [eager:fn-map self func]]]
+
+[mac* map+ [var self] body
+  qq.[fn-map+ \,self [fn [\,var] \,body]]]
