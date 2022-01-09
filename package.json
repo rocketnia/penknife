@@ -1,0 +1,45 @@
+{
+  "private": true,
+  "name": "penknife-lang",
+  "version": "0.1.0",
+  "description": "A language that emphasizes freedom of command.",
+  "keywords": [
+    "programming-language",
+    "arc",
+    "scheme",
+    "lisp"
+  ],
+  "homepage": "https://github.com/rocketnia/penknife#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocketnia/penknife.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rocketnia/penknife/issues"
+  },
+  "author": "Rocketnia",
+  "license": "(MIT OR Artistic-2.0)",
+  "scripts": {
+    "all": "npm run clean && npm run build && npm test",
+    "clean": "rm -rf build",
+    "build": "npm run build-arc-host-dir",
+    "build-arc-host-dir": "rainbow-js-arc init-arc build/test/arc/ && framewarc copy-into build/test/arc/lib/framewarc/",
+    "repl": "cd build/test/arc/ && rainbow-js-arc run-compat -e '(= fwarc-dir* \"lib/framewarc/\" penknife-dir* \"../../../\")' '(load:+ fwarc-dir* \"loadfirst.arc\")' '(load:+ penknife-dir* \"penknife.arc\")' '(pkrepl)'",
+    "test": "cd build/test/arc/ && rainbow-js-arc run-compat -e '(= fwarc-dir* \"lib/framewarc/\" penknife-dir* \"../../../\")' '(load:+ fwarc-dir* \"loadfirst.arc\")' '(load:+ penknife-dir* \"penknife.arc\")' '(pkrepl \"[+ arc[\\\"Hello, \\\"] arc[\\\"world!\\\"]]\")' -q"
+  },
+  "bin": "./penknife-node-cli.mjs",
+  "dependencies": {
+    "commander": "^8.3.0",
+    "fs-extra": "^10.0.0"
+  },
+  "devDependencies": {
+    "framewarc": "^0.1.2",
+    "rainbow-js-arc": "^0.3.0"
+  },
+  "files": [
+    "/*.arc",
+    "/*.pk",
+    "/penknife-node-cli.mjs",
+    "/LICENSE.txt"
+  ]
+}

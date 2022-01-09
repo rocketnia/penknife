@@ -1,7 +1,7 @@
 ; pk-core.arc
 
 
-; Copyright (c) 2010 Ross Angle
+; Copyright (c) 2010, 2022 Rocketnia
 ;
 ;   Permission is hereby granted, free of charge, to any person
 ;   obtaining a copy of this software and associated documentation
@@ -51,37 +51,32 @@
 ; part of the build process.
 ;
 ;
-; To use Penknife, you'll need a working Arc setup (either official
-; Arc 3.1[1][2][3], Anarki [2][3][4], Jarc [5], or Rainbow [6]), and
-; you'll need to have the Lathe library[7]. Note that Penknife is
-; *extremely* slow on Jarc 17, and it's not actually a self-sufficient
-; language on any of these platforms, since the global Penknife
-; environment only has a few test functions and has neither a way to
-; define new functions nor a way to run arbitrary Arc code. Right now,
-; you're expected to implement those things yourself! It's an
-; adventure~! :-p
+; To use Penknife, you'll need a working Arc setup (either official Arc
+; (available via the Anarki [1] official branch), Anarki [1], Jarc [2],
+; or Rainbow [3]), and you'll need to have the Framewarc library[4].
+; Note that Penknife is *extremely* slow on Jarc 17, and it's not
+; actually a self-sufficient language on any of these platforms, since
+; the global Penknife environment only has a few test functions and has
+; neither a way to define new functions nor a way to run arbitrary Arc
+; code. Right now, you're expected to implement those things yourself!
+; It's an adventure~! :-p
 ;
-; [1] http://arclanguage.org/item?id=10254
-;       "Arc 3.1 (works on latest MzScheme)"
-; [2] http://arclanguage.org/item?id=10625
-;       "Arc3.1 setuid problem on Windows"
-; [3] http://racket-lang.org/ (Racket)
-; [4] http://github.com/nex3/arc (Anarki)
-; [5] http://jarc.sourceforge.net/
-; [6] http://github.com/conanite/rainbow
-; [7] http://github.com/rocketnia/lathe
+; [1] https://arclanguage.github.io/
+; [2] http://jarc.sourceforge.net/
+; [3] https://github.com/conanite/rainbow
+; [4] https://github.com/rocketnia/framewarc
 
 
 ; Declaration listing:
 ;
-; ut   ; namespace of Lathe's utils.arc
-; dy   ; namespace of Lathe's dyn.arc
-; mr   ; namespace of Lathe's multival/multirule.arc
-; rc   ; namespace of Lathe's orc/orc.arc
-; sn   ; namespace of Lathe's imp/sniff.arc
-; jv   ; namespace of Lathe's imp/jvm.arc
-; plt  ; taken out of Lathe's imp/sniff.arc
-; jvm  ; taken out of Lathe's imp/jvm.arc
+; ut   ; namespace of Framewarc's utils.arc
+; dy   ; namespace of Framewarc's dyn.arc
+; mr   ; namespace of Framewarc's multival/multirule.arc
+; rc   ; namespace of Framewarc's orc/orc.arc
+; sn   ; namespace of Framewarc's imp/sniff.arc
+; jv   ; namespace of Framewarc's imp/jvm.arc
+; plt  ; taken out of Framewarc's imp/sniff.arc
+; jvm  ; taken out of Framewarc's imp/jvm.arc
 ;
 ; (fn-input-ify self)  ; rulebook
 ;
@@ -441,14 +436,14 @@
 ;   implementation of 'pk-hyperenv-traverse.
 
 
-(let lathe [+ lathe-dir* _ '.arc]
-  (use-fromwds-as ut do.lathe!utils
-                  dy do.lathe!dyn
-                  mr do.lathe!multival/multirule
-                  rc do.lathe!orc/orc
-                  oi do.lathe!orc/oiter
-                  sn do.lathe!imp/sniff
-                  jv do.lathe!imp/jvm))
+(let fwarc [+ fwarc-dir* _ '.arc]
+  (use-fromwds-as ut do.fwarc!utils
+                  dy do.fwarc!dyn
+                  mr do.fwarc!multival/multirule
+                  rc do.fwarc!orc/orc
+                  oi do.fwarc!orc/oiter
+                  sn do.fwarc!imp/sniff
+                  jv do.fwarc!imp/jvm))
 
 (= plt sn.plt jvm jv.jvm)
 
@@ -491,7 +486,8 @@
             read   (caselet charcode do.jread.self -1 nil
                      (coerce charcode 'char))
                    (err "Illegal fn-input option."))))
-        sn.rainbowdrop*
+        ; If we're on Java Rainbow (which doesn't define 'peekc)...
+        (and (no bound!peekc) sn.rainbowdrop*)
       (fn ((o mode 'read))
         (case mode
           ready  (java-invoke self 'ready nil)
@@ -503,7 +499,7 @@
                  (err "Illegal fn-input option.")))
       (fn ((o mode 'read))
         (case mode
-          ready  (~~and plt plt.char-ready?.self)
+          ready  (~~and sn.pltdrop* plt.char-ready?.self)
           peek   peekc.self
           read   readc.self
                  (err "Illegal fn-input option."))))))

@@ -1,7 +1,7 @@
 ; penknife.arc
 
 
-; Copyright (c) 2010 Ross Angle
+; Copyright (c) 2010, 2022 Rocketnia
 ;
 ;   Permission is hereby granted, free of charge, to any person
 ;   obtaining a copy of this software and associated documentation
@@ -35,13 +35,13 @@
 ; the working directory, set the global variable 'penknife-dir* before
 ; loading this, like so:
 ;
-;   (= lathe-dir* "my/path/to/lathe/arc/")
-;   (load:+ lathe-dir* "loadfirst.arc")
+;   (= fwarc-dir* "my/path/to/framewarc/arc/")
+;   (load:+ fwarc-dir* "loadfirst.arc")
 ;   (= penknife-dir* "my/path/to/penknife/")
 ;   (load:+ penknife-dir* "penknife.arc")
 ;
-; Lathe must be loaded (as shown above) before loading this file. Mind
-; the trailing slashes!
+; Framewarc must be loaded (as shown above) before loading this file.
+; Mind the trailing slashes!
 
 (let penknife-dir (or global!penknife-dir* "")
   (each file '(pk-core pk-util pk-thin-fn pk-hefty-fn pk-qq)
