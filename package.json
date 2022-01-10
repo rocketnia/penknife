@@ -1,6 +1,6 @@
 {
   "name": "penknife-lang",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A language that emphasizes freedom of command.",
   "keywords": [
     "programming-language",
@@ -22,7 +22,7 @@
     "penknife-lang": "node penknife-node-cli.mjs",
     "rainbow": "cd dist/arc/ && rainbow-js-arc run-compat",
     "all": "npm run clean && npm run build && npm test",
-    "clean": "rm -rf build",
+    "clean": "rm -rf dist",
     "build": "npm run build-arc-host-dir",
     "build-arc-host-dir": "rainbow-js-arc init-arc dist/arc/ && framewarc copy-into dist/arc/lib/framewarc/ && npm run penknife-lang copy-into dist/arc/lib/penknife/",
     "repl": "cd dist/arc/ && rainbow-js-arc run-compat -e '(= fwarc-dir* \"lib/framewarc/\" penknife-dir* \"lib/penknife/\")' '(load:+ fwarc-dir* \"loadfirst.arc\")' '(load:+ penknife-dir* \"penknife.arc\")' '(pkrepl)' -q",
