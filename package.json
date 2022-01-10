@@ -1,6 +1,6 @@
 {
   "name": "penknife-lang",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A language that emphasizes freedom of command.",
   "keywords": [
     "programming-language",
@@ -38,6 +38,7 @@
     "rainbow-js-arc": "^0.3.0"
   },
   "files": [
+    "/dist/arc/**",
     "/*.arc",
     "/*.pk",
     "/penknife-node-cli.mjs",
